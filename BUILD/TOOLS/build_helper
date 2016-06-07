@@ -102,12 +102,12 @@ compilations() {
   if [ "a$4" == "a1" ]; then 
     {
       rm -f $3
-      make $make_args
+      make $make_args -j`nproc`
     } | tee $dlog/$2.txt 
   else
     {
       rm -f $3
-      make $make_args
+      make $make_args -j`nproc`
     } > $dlog/$2.txt 2>&1
   fi
   if [ -s $3 ] ; then
@@ -317,7 +317,7 @@ install_nettle_from_source() {
     cd nettle-2.5/
     ./configure --disable-openssl --enable-shared --prefix=/usr 
     echo "Compiling nettle"
-    make -j4
+    make -j`nproc`
     make check 
     $SUDO make install 
     rm -rf /tmp/nettle-2.5.tar.gz /tmp/nettle-2.5
@@ -379,7 +379,7 @@ install_gnutls_from_source(){
     cd gnutls-3.1.23/
     ./configure --prefix=/usr
     echo "Compiling gnutls"
-    make -j4
+    make -j`nproc`
     $SUDO make install 
     rm -rf /tmp/gnutls-3.1.23.tar.xz /tmp/gnutls-3.1.23
   fi
