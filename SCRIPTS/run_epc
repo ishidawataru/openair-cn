@@ -252,7 +252,7 @@ function main()
     if [ "$run_valgrind" -eq 1 ]; then 
       $SUDO valgrind --leak-check=yes --track-origins=yes --leak-check=full --show-leak-kinds=all mme_gw  `echo $exe_arguments` 2>&1
     else
-      $SUDO mme_gw  `echo $exe_arguments` 2>&1
+      $SUDO $(which mme_gw) `echo $exe_arguments` 2>&1
     fi 
   else
     # trap keyboard interrupt (control-c) is done by gdb

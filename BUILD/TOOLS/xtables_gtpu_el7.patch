@@ -1,0 +1,67 @@
+diff --git extensions/xt_GTPUSP.c extensions/xt_GTPUSP.c
+index 8be69fa..1ec6f7d 100644
+--- extensions/xt_GTPUSP.c
++++ extensions/xt_GTPUSP.c
+@@ -63,6 +63,11 @@
+ 
+ #define GTPUSP_TIME_MEASUREMENT    0
+ #define GTPUSP_USE_SKB_COPY_EXPAND 0
++
++#if !defined(RHEL_RELEASE_CODE)
++  #define RHEL_RELEASE_CODE 0
++  #define RHEL_RELEASE_VERSION(x,y) 10
++#endif
+ //-----------------------------------------------------------------------------
+ 
+ static int  gtpusp_tg4_add (
+@@ -586,6 +591,20 @@ gtpusp_tg4_add (
+   if (NULL != new_skb_p) {
+     //_gtpusp_print_hex_octets((const unsigned char*)new_skb_p->data, new_skb_p->len);
+     if (segmented <= 0) {
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0) || RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(7,2)
++      ret =  udp_tunnel_xmit_skb(rt,
++                          new_skb_p->sk,
++                          new_skb_p,
++                          ((const struct xt_gtpusp_target_info *)(par_pP->targinfo))->laddr,
++                          ((const struct xt_gtpusp_target_info *)(par_pP->targinfo))->raddr,
++                          tos, // keep same tos
++                          ttl, // keep same ttl
++                          df1,
++                          htons(gtpu_sgw_port),
++                          htons(gtpu_enb_port),
++                          0 /*bool xnet*/,
++                          gtpusp_data.sock->sk->sk_no_check_tx);
++#else
+       ret =  udp_tunnel_xmit_skb(gtpusp_data.sock,
+                           rt,
+                           new_skb_p,
+@@ -597,6 +616,7 @@ gtpusp_tg4_add (
+                           htons(gtpu_sgw_port),
+                           htons(gtpu_enb_port),
+                           0 /*bool xnet*/);
++#endif
+     } else { // segmentation
+       //------------------------
+       // send first packet
+@@ -622,7 +642,7 @@ gtpusp_tg4_add (
+       iph_p->daddr    = ((const struct xt_gtpusp_target_info *)(par_pP->targinfo))->raddr;
+       iph_p->saddr    = ((const struct xt_gtpusp_target_info *)(par_pP->targinfo))->laddr;
+       iph_p->ttl      = ttl;
+-      __ip_select_ident(iph_p, 2);
++      __ip_select_ident(iph_p, skb_dst(new_skb_p), 2);
+       id = iph_p->id;
+       err = ip_local_out_sk(gtpusp_data.sock->sk, new_skb_p);
+       if (unlikely(net_xmit_eval(err)))
+diff --git mconfig mconfig
+index e19bbe0..70cdf8f 100644
+--- mconfig
++++ mconfig
+@@ -10,7 +10,7 @@ build_GTPUSP=m
+ build_IPMARK=m
+ build_LOGMARK=m
+ build_SYSRQ=m
+-build_TARPIT=m
++build_TARPIT=n
+ build_condition=m
+ build_fuzzy=m
+ build_geoip=m

@@ -153,7 +153,9 @@ function main()
     exit 0
   fi
   if [ $run_gdb -eq 0 ]; then 
-    $SUDO oai_hss  `echo $exe_arguments` 2>&1 
+    # execute oai_hss with absolute path to avoid having to
+    # inlucde /usr/local/bin into sudo's secure_path var
+    $SUDO $(which oai_hss) `echo $exe_arguments` 2>&1
   else
     $SUDO touch      ~/.gdb_hss
     $SUDO chmod 777  ~/.gdb_hss

@@ -25,6 +25,9 @@
 # company Eurecom
 # email: lionel.gauthier@eurecom.fr
 #
+
+set -x
+
 ################################
 # include helper functions
 ################################
@@ -48,7 +51,7 @@ function help()
   echo_error "  -f, --fqdn                     fqdn       HSS Fully Qualified Domain Name (if not specified default is `hostname --fqdn`)."
   echo_error "  -F, --force                               No interactive script for installation of software packages."
   echo_error "  -h, --help                                Print this help."
-  echo_error "  -i, --check-installed-software            Check installed software packages necessary to build and run HSS (support Ubuntu 14.04)."
+  echo_error "  -i, --check-installed-software            Check installed software packages necessary to build and run HSS (support Ubuntu 14.04 and RHEL/CentOS 7)."
   echo_error "  -I, --install-hss-files                   Install HSS database if necessary."
   echo_error "  -k, --operator-key             key        Operator key of the HSS."
   echo_error "                                            If filled, then OPc key in table users for all subscribers (IMSI) will be computed/updated."
@@ -131,7 +134,7 @@ function main()
         exit 0
         ;;
       -i | --check-installed-software)
-        echo "Check installed software packages necessary to build and run HSS (support Ubuntu 14.04):"
+        echo "Check installed software packages necessary to build and run HSS (support Ubuntu 14.04 and RHEL/CentOS 7):"
         set_openair_env
         var_check_install_oai_software=1
         shift;
@@ -207,9 +210,9 @@ function main()
     mme_hostname=${mme_fqdn%%.*}
     cmake_args="$cmake_args -DMME_HOSTNAME=$mme_hostname"
   
-    mme_ip=`resolveip --silent $mme_hostname`
+    mme_ip=$(getent ahostsv4 $mme_hostname | awk '{ print $1; exit }')
     if [[ z$mme_ip = z ]]; then
-      mme_ip=`resolveip --silent $mme_fqdn`
+      mme_ip=$(getent ahostsv4 $mme_fqdn | awk '{ print $1; exit }')
     fi
     if [[ z$mme_ip = z ]]; then
       echo_fatal "Unable to get MME IP addr of $mme_fqdn"
@@ -248,9 +251,9 @@ function main()
       echo_fatal "FreeDiameter prefix not found, install freeDiameter if EPC, HSS"
     fi
   fi
-  
- 
-  
+
+
+
   cmake_args="$cmake_args -DOPENAIRCN_DIR=$OPENAIRCN_DIR"
 
   cd $OPENAIRCN_DIR/BUILD/HSS
@@ -276,7 +279,7 @@ function main()
     mkdir -m 777 -p -v BUILD
   fi
   cd ./BUILD
-  cmake  $cmake_args .. > /dev/null 
+  $CMAKE  $cmake_args .. > /dev/null
   make $make_args
   chmod -Rf 777 *
   $SUDO make install  

@@ -51,6 +51,23 @@ function main()
 
     set_openair_env
     
+    # If this is a fresh MySQL installation, ensure the MySQL user password is
+    # set and installation security hardened.
+    $MYSQL -u $1 --password="" -e ";"
+    if [ $? -eq 0 ]; then
+      echo_info "User $1 does not yet have a password set. Setting it now."
+      Q1="UPDATE mysql.user SET Password=PASSWORD('$2') WHERE User='$1';"
+      Q2="DELETE FROM mysql.user WHERE User='';"
+      Q3="DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');"
+      Q4="DROP DATABASE IF EXISTS test;"
+      Q5="DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';"
+      Q6="FLUSH PRIVILEGES;"
+      SQL="${Q1}${Q2}${Q3}${Q4}${Q5}${Q6}"
+      $MYSQL -u $1 --password="" -e "$SQL"
+    else
+      echo_info "User $1's password was already set."
+    fi
+
     # removed %
     #Q1="GRANT ALL PRIVILEGES ON *.* TO '$3'@'%' IDENTIFIED BY '$4' WITH GRANT OPTION;"
     Q1="GRANT ALL PRIVILEGES ON *.* TO '$3'@'localhost' IDENTIFIED BY '$4' WITH GRANT OPTION;"
@@ -77,7 +94,7 @@ function main()
     
     
     # test if tables have been created
-    mysql -u $3 --password=$4  -e "desc $5.users" > /dev/null 2>&1
+    $MYSQL -u $3 --password=$4  -e "desc $5.users" > /dev/null 2>&1
     
     if [ $? -eq 1 ]; then 
         $MYSQL -u $3 --password=$4 $5 < $OPENAIRCN_DIR/SRC/OAI_HSS/db/$5.sql

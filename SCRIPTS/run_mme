@@ -217,7 +217,9 @@ function main()
   if [ $run_gdb -eq 0 ]; then 
     # trap keyboard interrupt (control-c)
     trap control_c SIGINT
-    $SUDO mme  `echo $exe_arguments` 2>&1 
+    # execute mme_gw with absolute path to avoid having to
+    # inlucde /usr/local/bin into sudo's secure_path var
+    $SUDO $(which mme_gw) `echo $exe_arguments` 2>&1
   else
     # trap keyboard interrupt (control-c) is done by gdb
     $SUDO touch      ~/.gdb_mme
