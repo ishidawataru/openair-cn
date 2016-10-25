@@ -26,8 +26,6 @@
 # email: lionel.gauthier@eurecom.fr
 #
 
-set -x
-
 ################################
 # include helper functions
 ################################
@@ -296,7 +294,7 @@ function main()
   echo 'include(${CMAKE_CURRENT_SOURCE_DIR}/../CMakeLists.txt)' >> $cmake_file
   
   cd ./BUILD
-  $CMAKE  $cmake_args .. > /dev/null
+  $CMAKE  $cmake_args .. 
   
   if [ $conf_files_only -eq 0 ]; then
     compilations EPC mme_gw mme_gw $verbose

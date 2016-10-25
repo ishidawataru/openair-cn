@@ -53,7 +53,7 @@ function main()
     
     # If this is a fresh MySQL installation, ensure the MySQL user password is
     # set and installation security hardened.
-    $MYSQL -u $1 --password="" -e ";"
+    $MYSQL -u $1 --password="$2" -e ";"
     if [ $? -eq 0 ]; then
       echo_info "User $1 does not yet have a password set. Setting it now."
       Q1="UPDATE mysql.user SET Password=PASSWORD('$2') WHERE User='$1';"
@@ -63,7 +63,7 @@ function main()
       Q5="DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';"
       Q6="FLUSH PRIVILEGES;"
       SQL="${Q1}${Q2}${Q3}${Q4}${Q5}${Q6}"
-      $MYSQL -u $1 --password="" -e "$SQL"
+      $MYSQL -u $1 --password="$2" -e "$SQL"
     else
       echo_info "User $1's password was already set."
     fi
