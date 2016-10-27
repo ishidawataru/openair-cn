@@ -24,7 +24,7 @@
 # author Laurent Thomas, Lionel GAUTHIER
 #
 #######################################
-
+SUPPORTED_DISTRO="Ubuntu 14.04/15.10, Cent OS 7, Redhat EL 7"
 if [ ! -f /etc/os-release ]; then
   echo "No /etc/os-release file found. You're likely on an unsupported distro."
   exit -1
@@ -118,18 +118,29 @@ clean_all_files() {
 # arg 3 Executable name (no path)
 # arg 4 Verbose         (1 or 0)
 compilations() {
+  echo_info "Compilation log for $3 is here: $dlog/$2.txt"
   cd $OPENAIRCN_DIR/BUILD/$1/BUILD
-  if [ "a$4" == "a1" ]; then 
-    {
-      rm -f $3
-      make $make_args
-    } | tee $dlog/$2.txt 
+  (
+  if [ "$4" == "1" ]; then
+    rm -f $3
+    make -j`nproc` $3 VERBOSE=1
   else
-    {
-      rm -f $3
-      make $make_args
-    } > $dlog/$2.txt 2>&1
+    rm -f  $3
+    make -j`nproc` $3
   fi
+  )  > $dlog/$2.txt 2>&1
+
+#  if [ "a$4" == "a1" ]; then 
+#    {
+#      rm -f $3
+#      make $make_args
+#    } | tee $dlog/$2.txt 
+#  else
+#    {
+#      rm -f $3
+#      make $make_args
+#    } > $dlog/$2.txt 2>&1
+#  fi
   if [ -s $3 ] ; then
      echo_success "$2 compiled"
   else
@@ -314,11 +325,21 @@ install_libgtpnl_from_source() {
   fi
 
   # Compilers, generators, ...
-  $SUDO apt-get install $OPTION \
+  if [[ "$OS_DISTRO" == "ubuntu" ]]; then
+    PACKAGE_LIST="\
     autoconf  \
     automake  \
     build-essential \
-    libmnl-dev
+    libmnl-dev"
+  elif [[ "$OS_BASEDISTRO" == "fedora" ]]; then
+    PACKAGE_LIST="\
+    autoconf  \
+    automake  \
+    libmnl-devel"
+  else
+    echo_fatal "$OS_DISTRO is not a supported distribution."
+  fi
+  $SUDO $INSTALLER install $OPTION $PACKAGE_LIST
 
   if [ $1 -eq 0 ]; then
     read -p "Do you want to install libgtpnl ? <y/N> " prompt
@@ -406,62 +427,6 @@ install_gnutls_from_source(){
 
 #-------------------------------------------------------------------------------
 # arg1 is force (no interactive script)
-install_1.1.5_freediameter_from_source() {
-  if [ $1 -eq 0 ]; then
-    read -p "Do you want to install freeDiameter 1.1.5 ? <y/N> " prompt
-    OPTION=""
-  else
-    prompt='y'
-    OPTION="-y"
-  fi
-
-  # libpq-dev 'may' be not needed
-  $SUDO apt-get install $OPTION \
-    autoconf  \
-    automake  \
-    bison     \
-    build-essential \
-    cmake \
-    cmake-curses-gui  \
-    debhelper \
-    flex  \
-    g++ \
-    gcc \
-    gdb \
-    libgcrypt-dev \
-    libidn11-dev \
-    libmysqlclient-dev \
-    libpq-dev \
-    libsctp1 \
-    libsctp-dev \
-    libxml2-dev \
-    mercurial \
-    python-dev \
-    ssl-cert \
-    swig
-
-  if [[ $prompt =~ [yY](es)* ]]
-  then    
-    cd /tmp
-    echo "Downloading 1.1.5 freeDiameter archive"
-    $SUDO rm -rf /tmp/1.1.5.tar.gz /tmp/freeDiameter-1.1.5 /tmp/freediameter
-    GIT_SSL_NO_VERIFY=true git clone https://gitlab.eurecom.fr/oai/freediameter.git -b eurecom-1.1.5
-    cd /tmp/freediameter
-    #patch -p1 < $OPENAIRCN_DIR/SRC/S6A/freediameter/freediameter-1.1.5.patch 
-    mkdir build
-    cd build
-    cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr ../ 
-    echo "Compiling freeDiameter"
-    make -j`nproc`
-    #make test 
-    $SUDO make install
-    cd /tmp
-    rm -rf /tmp/1.1.5.tar.gz /tmp/freeDiameter-1.1.5 /tmp/freediameter
-  fi
-}
-
-#-------------------------------------------------------------------------------
-# arg1 is force (no interactive script)
 install_freediameter_from_source() {
   if [ $1 -eq 0 ]; then
     read -p "Do you want to install freeDiameter 1.2.0 ? <y/N> " prompt
@@ -521,13 +486,14 @@ install_freediameter_from_source() {
   if [[ $prompt =~ [yY](es)* ]]
   then    
     cd /tmp
+    freedia_install_log=/tmp/freediameter-install.log
+    $SUDO rm -fr $freedia_install_log
+    echo_info "Installing freediameter. The installation of freediameter is in $freedia_install_log"
+    (
     echo "Downloading 1.2.0 freeDiameter archive"
     $SUDO rm -rf /tmp/1.2.0.tar.gz* /tmp/freeDiameter-1.2.0 /tmp/freediameter
     GIT_SSL_NO_VERIFY=true git clone https://gitlab.eurecom.fr/oai/freediameter.git -b eurecom-1.2.0  
-    #wget http://www.freediameter.net/hg/freeDiameter/archive/1.2.0.tar.gz 
-    #tar xzf 1.2.0.tar.gz
     cd freediameter
-    #patch -p1 < $OPENAIRCN_DIR/SRC/S6A/freediameter/freediameter-1.2.0.patch 
     mkdir build
     cd build
     $CMAKE -DCMAKE_INSTALL_PREFIX:PATH=/usr/local ../
@@ -537,6 +503,7 @@ install_freediameter_from_source() {
     $SUDO make install
     cd /tmp
     rm -rf /tmp/1.2.0.tar.gz /tmp/freeDiameter-1.2.0 /tmp/freediameter
+    ) > $freedia_install_log 2>&1
   fi
 }
 
@@ -623,7 +590,6 @@ update_package_db() {
       touch /tmp/no_more_update_package_db
     fi
   fi
-  check_reboot_required
 }
 
 #-------------------------------------------------------------------------------
@@ -1124,7 +1090,11 @@ install_asn1c_from_source(){
   $SUDO $INSTALLER install $OPTION $PACKAGE_LIST
 
   if [[ $prompt =~ [yY](es)* ]]
-  then    
+  then   
+    asn1c_install_log=/tmp/asn1c-install.log
+    $SUDO rm -fr $asn1c_install_log
+    echo_info "Installing asn1c from source. The installation of asn1c is in $asn1c_install_log"
+    ( 
     $SUDO rm -rf /tmp/asn1c
     mkdir -p /tmp/asn1c
     git clone https://gitlab.eurecom.fr/oai/asn1c.git /tmp/asn1c
@@ -1132,6 +1102,7 @@ install_asn1c_from_source(){
     ./configure
     make > /tmp/log_compile_asn1c 2>&1
     $SUDO make install
+    ) > $asn1c_install_log 2>&1
   fi
 }
 
