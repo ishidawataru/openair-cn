@@ -748,10 +748,8 @@ set(libnas_mme_emm_OBJS
   ${NAS_SRC}EMM/Attach.c
   ${NAS_SRC}EMM/Authentication.c
   ${NAS_SRC}EMM/Detach.c
-  ${NAS_SRC}EMM/EmmCommon.c
   ${NAS_SRC}EMM/emm_data_ctx.c
   ${NAS_SRC}EMM/emm_main.c
-  ${NAS_SRC}EMM/emm_specific.c
   ${NAS_SRC}EMM/EmmStatusHdl.c
   ${NAS_SRC}EMM/Identification.c
   ${NAS_SRC}EMM/LowerLayer.c
@@ -801,6 +799,7 @@ add_library(LIB_NAS_MME
   ${NAS_SRC}nas_itti_messaging.c
   ${NAS_SRC}nas_network.c
   ${NAS_SRC}nas_proc.c
+  ${NAS_SRC}nas_procedures.c
   ${libnas_api_OBJS}
   ${libnas_mme_api_OBJS}
   ${libnas_emm_msg_OBJS}

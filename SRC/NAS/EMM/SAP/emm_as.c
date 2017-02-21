@@ -451,7 +451,7 @@ static int _emm_as_recv (
       OAILOG_FUNC_RETURN (LOG_NAS_EMM, decoder_rc);
     }
 
-    rc = emm_recv_detach_request (ue_id, &emm_msg->detach_request, emm_cause, decode_status);
+    rc = emm_recv_detach_request (ue_id, &emm_msg->detach_request, false, emm_cause, decode_status);
     break;
 
   default:
@@ -623,13 +623,21 @@ static int _emm_as_establish_req (const emm_as_establish_t * msg, int *emm_cause
   bdestroy_wrapper(&msg->nas_msg);
 
 
-  if (decoder_rc < TLV_FATAL_ERROR) {
-    *emm_cause = EMM_CAUSE_PROTOCOL_ERROR;
-    OAILOG_FUNC_RETURN (LOG_NAS_EMM, decoder_rc);
-  } else if (decoder_rc == TLV_UNEXPECTED_IEI) {
-    *emm_cause = EMM_CAUSE_IE_NOT_IMPLEMENTED;
-  } else if (decoder_rc < 0) {
-    *emm_cause = EMM_CAUSE_PROTOCOL_ERROR;
+  // TODO conditional IE error
+  if (decoder_rc < 0) {
+    if (decoder_rc < TLV_FATAL_ERROR) {
+      *emm_cause = EMM_CAUSE_PROTOCOL_ERROR;
+      OAILOG_FUNC_RETURN (LOG_NAS_EMM, decoder_rc);
+    } else if (decoder_rc == TLV_MANDATORY_FIELD_NOT_PRESENT) {
+      *emm_cause = EMM_CAUSE_INVALID_MANDATORY_INFO;
+      REQUIREMENT_3GPP_24_301(R10_5_5_1_2_7_b__1);
+    } else if (decoder_rc == TLV_UNEXPECTED_IEI) {
+      *emm_cause = EMM_CAUSE_IE_NOT_IMPLEMENTED;
+      REQUIREMENT_3GPP_24_301(R10_5_5_1_2_7_b__2);
+    } else {
+      *emm_cause = EMM_CAUSE_PROTOCOL_ERROR;
+      REQUIREMENT_3GPP_24_301(R10_5_5_1_2_7_b__4);
+    }
   }
 
   /*
@@ -652,11 +660,11 @@ static int _emm_as_establish_req (const emm_as_establish_t * msg, int *emm_cause
       OAILOG_FUNC_RETURN (LOG_NAS_EMM, decoder_rc);
     }
 
-    rc = emm_recv_detach_request (msg->ue_id, &emm_msg->detach_request, emm_cause, &decode_status);
+    rc = emm_recv_detach_request (msg->ue_id, &emm_msg->detach_request, msg->is_initial, emm_cause, &decode_status);
     break;
 
   case TRACKING_AREA_UPDATE_REQUEST:
-    rc = emm_recv_tracking_area_update_request (msg->ue_id, &emm_msg->tracking_area_update_request, emm_cause, &decode_status);
+    rc = emm_recv_tracking_area_update_request (msg->ue_id, &emm_msg->tracking_area_update_request, msg->is_initial, emm_cause, &decode_status);
     break;
 
   case SERVICE_REQUEST:
@@ -669,7 +677,7 @@ static int _emm_as_establish_req (const emm_as_establish_t * msg, int *emm_cause
       OAILOG_FUNC_RETURN (LOG_NAS_EMM, decoder_rc);
     }
 
-    rc = emm_recv_service_request (msg->ue_id, MME_APP_ENB_S1AP_ID_KEY2ENB_S1AP_ID(msg->enb_ue_s1ap_id_key), &emm_msg->service_request, emm_cause, &decode_status);
+    rc = emm_recv_service_request (msg->ue_id, MME_APP_ENB_S1AP_ID_KEY2ENB_S1AP_ID(msg->enb_ue_s1ap_id_key), &emm_msg->service_request, msg->is_initial, emm_cause, &decode_status);
     break;
 
   case EXTENDED_SERVICE_REQUEST:

@@ -57,9 +57,10 @@
 #include "dynamic_memory_check.h"
 #include "assertions.h"
 #include "nas_timer.h"
-#include "emm_data.h"
+#include "3gpp_23.003.h"
 #include "3gpp_24.007.h"
 #include "3gpp_24.008.h"
+#include "emm_data.h"
 #include "3gpp_29.274.h"
 #include "mme_app_ue_context.h"
 #include "emm_proc.h"
@@ -189,18 +190,12 @@ emm_proc_detach (
 int
 emm_proc_detach_request (
   mme_ue_s1ap_id_t ue_id,
-  emm_proc_detach_type_t type,
-  int switch_off,
-  ksi_t native_ksi,
-  ksi_t ksi,
-  guti_t * guti,
-  imsi_t * imsi,
-  imei_t * imei)
+  emm_detach_request_params_t * params)
 {
   OAILOG_FUNC_IN (LOG_NAS_EMM);
   int                                     rc;
 
-  OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Detach type = %s (%d) requested (ue_id=" MME_UE_S1AP_ID_FMT ")", _emm_detach_type_str[type], type, ue_id);
+  OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Detach type = %s (%d) requested (ue_id=" MME_UE_S1AP_ID_FMT ")", _emm_detach_type_str[params->type], params->type, ue_id);
   /*
    * Get the UE context
    */
@@ -213,9 +208,12 @@ emm_proc_detach_request (
 
   emm_context_t *emm_ctx = &ue_mm_context->emm_context;
 
-  emm_context_silently_reset_procedures(emm_ctx);
+  /*
+   * Stop also timer T3450, T3460, T3470 if any
+   */
+  nas_delete_all_emm_procedures(emm_ctx);
 
-  if (switch_off) {
+  if (params->switch_off) {
     MSC_LOG_EVENT (MSC_NAS_EMM_MME, "0 Clearing secu/auth UE context ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
 
     /*
@@ -227,49 +225,12 @@ emm_proc_detach_request (
     //emm_ctx_clear_imsi(emm_ctx);
     //emm_ctx_clear_imei(emm_ctx);
     //emm_ctx_clear_imeisv(emm_ctx);
-    emm_ctx_clear_auth_vectors(emm_ctx);
-    emm_ctx_clear_security(emm_ctx);
-    emm_ctx_clear_non_current_security(emm_ctx);
-
-
-    if (emm_ctx->esm_msg) {
-      bdestroy_wrapper (&emm_ctx->esm_msg);
-    }
-
-    /*
-     * Stop timer T3450
-     */
-    if (emm_ctx->T3450.id != NAS_TIMER_INACTIVE_ID) {
-      OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Stop timer T3450 (%ld)", emm_ctx->T3450.id);
-      emm_ctx->T3450.id = nas_timer_stop (emm_ctx->T3450.id);
-      MSC_LOG_EVENT (MSC_NAS_EMM_MME, "0 T3450 stopped UE " MME_UE_S1AP_ID_FMT " ", ue_id);
-    }
-
-    /*
-     * Stop timer T3460
-     */
-    if (emm_ctx->T3460.id != NAS_TIMER_INACTIVE_ID) {
-      OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Stop timer T3460 (%ld)", emm_ctx->T3460.id);
-      emm_ctx->T3460.id = nas_timer_stop (emm_ctx->T3460.id);
-      MSC_LOG_EVENT (MSC_NAS_EMM_MME, "0 T3460 stopped UE " MME_UE_S1AP_ID_FMT " ", ue_id);
-    }
-
-    /*
-     * Stop timer T3470
-     */
-    if (emm_ctx->T3470.id != NAS_TIMER_INACTIVE_ID) {
-      OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Stop timer T3470 (%ld)", emm_ctx->T3460.id);
-      emm_ctx->T3470.id = nas_timer_stop (emm_ctx->T3470.id);
-      MSC_LOG_EVENT (MSC_NAS_EMM_MME, "0 T3470 stopped UE " MME_UE_S1AP_ID_FMT " ", ue_id);
-    }
+    emm_context_free_content_except_key_fields(emm_ctx);
 
     /*
      * Release the EMM context
      */
-#warning "TODO think about emm_context_remove"
-    //emm_context_remove (&_emm_data, emm_ctx);
-    //free_wrapper ((void**)&emm_ctx);
-
+     // TODO think about emm context Release
     rc = RETURNok;
   } else {
     /*

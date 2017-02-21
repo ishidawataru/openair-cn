@@ -140,92 +140,92 @@ esm_msg_decode (
   len -= header_result;
 
   switch (msg->header.message_type) {
-  case PDN_DISCONNECT_REQUEST:
-    decode_result = decode_pdn_disconnect_request (&msg->pdn_disconnect_request, buffer, len);
-    break;
-
-  case DEACTIVATE_EPS_BEARER_CONTEXT_ACCEPT:
-    decode_result = decode_deactivate_eps_bearer_context_accept (&msg->deactivate_eps_bearer_context_accept, buffer, len);
-    break;
-
-  case BEARER_RESOURCE_ALLOCATION_REQUEST:
-    decode_result = decode_bearer_resource_allocation_request (&msg->bearer_resource_allocation_request, buffer, len);
-    break;
-
-  case ACTIVATE_DEFAULT_EPS_BEARER_CONTEXT_ACCEPT:
-    decode_result = decode_activate_default_eps_bearer_context_accept (&msg->activate_default_eps_bearer_context_accept, buffer, len);
-    break;
-
-  case PDN_CONNECTIVITY_REJECT:
-    decode_result = decode_pdn_connectivity_reject (&msg->pdn_connectivity_reject, buffer, len);
-    break;
-
-  case MODIFY_EPS_BEARER_CONTEXT_REJECT:
-    decode_result = decode_modify_eps_bearer_context_reject (&msg->modify_eps_bearer_context_reject, buffer, len);
+  case ACTIVATE_DEDICATED_EPS_BEARER_CONTEXT_ACCEPT:
+    decode_result = decode_activate_dedicated_eps_bearer_context_accept (&msg->activate_dedicated_eps_bearer_context_accept, buffer, len);
     break;
 
   case ACTIVATE_DEDICATED_EPS_BEARER_CONTEXT_REJECT:
     decode_result = decode_activate_dedicated_eps_bearer_context_reject (&msg->activate_dedicated_eps_bearer_context_reject, buffer, len);
     break;
 
-  case MODIFY_EPS_BEARER_CONTEXT_ACCEPT:
-    decode_result = decode_modify_eps_bearer_context_accept (&msg->modify_eps_bearer_context_accept, buffer, len);
+  case ACTIVATE_DEDICATED_EPS_BEARER_CONTEXT_REQUEST:
+    decode_result = decode_activate_dedicated_eps_bearer_context_request (&msg->activate_dedicated_eps_bearer_context_request, buffer, len);
     break;
 
-  case DEACTIVATE_EPS_BEARER_CONTEXT_REQUEST:
-    decode_result = decode_deactivate_eps_bearer_context_request (&msg->deactivate_eps_bearer_context_request, buffer, len);
-    break;
-
-  case ACTIVATE_DEDICATED_EPS_BEARER_CONTEXT_ACCEPT:
-    decode_result = decode_activate_dedicated_eps_bearer_context_accept (&msg->activate_dedicated_eps_bearer_context_accept, buffer, len);
+  case ACTIVATE_DEFAULT_EPS_BEARER_CONTEXT_ACCEPT:
+    decode_result = decode_activate_default_eps_bearer_context_accept (&msg->activate_default_eps_bearer_context_accept, buffer, len);
     break;
 
   case ACTIVATE_DEFAULT_EPS_BEARER_CONTEXT_REJECT:
     decode_result = decode_activate_default_eps_bearer_context_reject (&msg->activate_default_eps_bearer_context_reject, buffer, len);
     break;
 
-  case MODIFY_EPS_BEARER_CONTEXT_REQUEST:
-    decode_result = decode_modify_eps_bearer_context_request (&msg->modify_eps_bearer_context_request, buffer, len);
-    break;
-
-  case PDN_DISCONNECT_REJECT:
-    decode_result = decode_pdn_disconnect_reject (&msg->pdn_disconnect_reject, buffer, len);
-    break;
-
-  case ACTIVATE_DEDICATED_EPS_BEARER_CONTEXT_REQUEST:
-    decode_result = decode_activate_dedicated_eps_bearer_context_request (&msg->activate_dedicated_eps_bearer_context_request, buffer, len);
-    break;
-
-  case BEARER_RESOURCE_MODIFICATION_REJECT:
-    decode_result = decode_bearer_resource_modification_reject (&msg->bearer_resource_modification_reject, buffer, len);
+  case ACTIVATE_DEFAULT_EPS_BEARER_CONTEXT_REQUEST:
+    decode_result = decode_activate_default_eps_bearer_context_request (&msg->activate_default_eps_bearer_context_request, buffer, len);
     break;
 
   case BEARER_RESOURCE_ALLOCATION_REJECT:
     decode_result = decode_bearer_resource_allocation_reject (&msg->bearer_resource_allocation_reject, buffer, len);
     break;
 
-  case ACTIVATE_DEFAULT_EPS_BEARER_CONTEXT_REQUEST:
-    decode_result = decode_activate_default_eps_bearer_context_request (&msg->activate_default_eps_bearer_context_request, buffer, len);
+  case BEARER_RESOURCE_ALLOCATION_REQUEST:
+    decode_result = decode_bearer_resource_allocation_request (&msg->bearer_resource_allocation_request, buffer, len);
     break;
 
-  case PDN_CONNECTIVITY_REQUEST:
-    decode_result = decode_pdn_connectivity_request (&msg->pdn_connectivity_request, buffer, len);
-    break;
-
-  case ESM_INFORMATION_RESPONSE:
-    decode_result = decode_esm_information_response (&msg->esm_information_response, buffer, len);
+  case BEARER_RESOURCE_MODIFICATION_REJECT:
+    decode_result = decode_bearer_resource_modification_reject (&msg->bearer_resource_modification_reject, buffer, len);
     break;
 
   case BEARER_RESOURCE_MODIFICATION_REQUEST:
     decode_result = decode_bearer_resource_modification_request (&msg->bearer_resource_modification_request, buffer, len);
     break;
 
+  case DEACTIVATE_EPS_BEARER_CONTEXT_ACCEPT:
+    decode_result = decode_deactivate_eps_bearer_context_accept (&msg->deactivate_eps_bearer_context_accept, buffer, len);
+    break;
+
+  case DEACTIVATE_EPS_BEARER_CONTEXT_REQUEST:
+    decode_result = decode_deactivate_eps_bearer_context_request (&msg->deactivate_eps_bearer_context_request, buffer, len);
+    break;
+
   case ESM_INFORMATION_REQUEST:
     decode_result = decode_esm_information_request (&msg->esm_information_request, buffer, len);
     break;
 
+  case ESM_INFORMATION_RESPONSE:
+    decode_result = decode_esm_information_response (&msg->esm_information_response, buffer, len);
+    break;
+
   case ESM_STATUS:
     decode_result = decode_esm_status (&msg->esm_status, buffer, len);
+    break;
+
+  case MODIFY_EPS_BEARER_CONTEXT_ACCEPT:
+    decode_result = decode_modify_eps_bearer_context_accept (&msg->modify_eps_bearer_context_accept, buffer, len);
+    break;
+
+  case MODIFY_EPS_BEARER_CONTEXT_REJECT:
+    decode_result = decode_modify_eps_bearer_context_reject (&msg->modify_eps_bearer_context_reject, buffer, len);
+    break;
+
+  case MODIFY_EPS_BEARER_CONTEXT_REQUEST:
+    decode_result = decode_modify_eps_bearer_context_request (&msg->modify_eps_bearer_context_request, buffer, len);
+    break;
+
+  case PDN_CONNECTIVITY_REQUEST:
+    decode_result = decode_pdn_connectivity_request (&msg->pdn_connectivity_request, buffer, len);
+    break;
+
+  case PDN_CONNECTIVITY_REJECT:
+    decode_result = decode_pdn_connectivity_reject (&msg->pdn_connectivity_reject, buffer, len);
+    break;
+
+  case PDN_DISCONNECT_REJECT:
+    decode_result = decode_pdn_disconnect_reject (&msg->pdn_disconnect_reject, buffer, len);
+    break;
+
+  case PDN_DISCONNECT_REQUEST:
+    decode_result = decode_pdn_disconnect_request (&msg->pdn_disconnect_request, buffer, len);
     break;
 
   default:

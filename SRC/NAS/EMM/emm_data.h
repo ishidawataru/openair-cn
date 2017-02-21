@@ -40,18 +40,19 @@ Description Defines internal private data handled by EPS Mobility
 #define FILE_EMM_DATA_SEEN
 
 #include <sys/types.h>
+#include "queue.h"
 #include "hashtable.h"
 #include "obj_hashtable.h"
 #include "securityDef.h"
 #include "TrackingAreaIdentityList.h"
 #include "emm_fsm.h"
 #include "nas_timer.h"
+#include "nas_procedures.h"
 #include "3gpp_24.301.h"
 #include "3gpp_24.008.h"
 #include "UeNetworkCapability.h"
 #include "EpsBearerContextStatus.h"
 #include "EpsNetworkFeatureSupport.h"
-#include "emm_specific.h"
 #include "esm_data.h"
 
 /****************************************************************************/
@@ -113,39 +114,20 @@ typedef struct emm_security_context_s {
  */
 struct emm_common_data_s;
 
+
 /*
  * Structure of the EMM context established by the network for a particular UE
  * ---------------------------------------------------------------------------
  */
 typedef struct emm_context_s {
-  //mme_ue_s1ap_id_t ue_id;        /* UE identifier                                  */
   bool             is_dynamic;  /* Dynamically allocated context indicator         */
   bool             is_attached; /* Attachment indicator                            */
   bool             is_emergency;/* Emergency bearer services indicator             */
-  bool             is_has_been_attached; /* Attachment indicator                   */
+  bool             is_initial_identity_imsi; // If the IMSI was used for identification in the initial NAS message
 
   uint             num_attach_request;/* Num attach request received               */
-  //bool             is_attach_accept_sent ;/* Do we have sent attach accept         */
-  //bool             is_attach_reject_sent ;/* Do we have sent attach reject         */
-  //bool             is_attach_complete_received ;/* Do we have received attach complete */
 
-  // this bitmask is here because we wanted to avoid modifying the EmmCommon interface
-  uint32_t         common_proc_mask;  /* bitmask, see significance of bits below */
-#define           EMM_CTXT_COMMON_PROC_GUTI                      ((uint32_t)1 << 0)
-#define           EMM_CTXT_COMMON_PROC_AUTH                      ((uint32_t)1 << 1)
-#define           EMM_CTXT_COMMON_PROC_SMC                       ((uint32_t)1 << 2)
-#define           EMM_CTXT_COMMON_PROC_IDENT                     ((uint32_t)1 << 3)
-#define           EMM_CTXT_COMMON_PROC_INFO                      ((uint32_t)1 << 4)
-  // May have more than 1 common procedure running, but we will see when it will be needed.
-  struct emm_common_data_s *common_proc;
-  uint32_t         specific_proc_mask;  /* bitmask, see significance of bits below */
-#define           EMM_CTXT_SPEC_PROC_ATTACH                      ((uint32_t)1 << 0)
-#define           EMM_CTXT_SPEC_PROC_ATTACH_ACCEPT_SENT          ((uint32_t)1 << 1)
-#define           EMM_CTXT_SPEC_PROC_ATTACH_REJECT_SENT          ((uint32_t)1 << 2)
-#define           EMM_CTXT_SPEC_PROC_TAU                         ((uint32_t)1 << 3)
-#define           EMM_CTXT_SPEC_PROC_TAU_ACCEPT_SENT             ((uint32_t)1 << 4)
-#define           EMM_CTXT_SPEC_PROC_TAU_REJECT_SENT             ((uint32_t)1 << 5)
-#define           EMM_CTXT_SPEC_PROC_MME_INITIATED_DETACH_SENT   ((uint32_t)1 << 6)
+  emm_procedures_t  *emm_procedures;
 
   uint32_t         member_present_mask; /* bitmask, see significance of bits below */
   uint32_t         member_valid_mask;   /* bitmask, see significance of bits below */
@@ -175,21 +157,22 @@ typedef struct emm_context_s {
 #define           EMM_CTXT_MEMBER_SET_BIT( eMmCtXtMemBeRmAsK, bIt )   do { (eMmCtXtMemBeRmAsK) |= bIt;} while (0)
 #define           EMM_CTXT_MEMBER_CLEAR_BIT( eMmCtXtMemBeRmAsK, bIt ) do { (eMmCtXtMemBeRmAsK) &= ~bIt;} while (0)
 
+  // imsi present mean we know it but was not checked with identity proc, or was not provided in initial message
   imsi_t                   _imsi;        /* The IMSI provided by the UE or the MME, set valid when identification returns IMSI */
   imsi64_t                 _imsi64;      /* The IMSI provided by the UE or the MME, set valid when identification returns IMSI */
-  imsi64_t                 saved_imsi64; /* Useful for 5.4.2.7.c */
   imei_t                   _imei;        /* The IMEI provided by the UE                     */
   imeisv_t                 _imeisv;      /* The IMEISV provided by the UE                   */
-  //bool                   _guti_is_new; /* The GUTI assigned to the UE is new              */
   guti_t                   _guti;        /* The GUTI assigned to the UE                     */
   guti_t                   _old_guti;    /* The old GUTI (GUTI REALLOCATION)                */
   tai_list_t               _tai_list;    /* TACs the the UE is registered to                */
   tai_t                    _lvr_tai;
   tai_t                    originating_tai;
 
-  ksi_t                    ue_ksi;       /* Security key set identifier provided by the UE  */
+  ksi_t                     ksi;         /*key set identifier  */
   ue_network_capability_t  _ue_network_capability;
   ms_network_capability_t  _ms_network_capability;
+  drx_parameter_t          _drx_parameter;
+  bstring                  ue_radio_capability_information;
 
 
   int                      remaining_vectors;         // remaining unused vectors
@@ -197,8 +180,6 @@ typedef struct emm_context_s {
   emm_security_context_t   _security;                /* Current EPS security context: The security context which has been activated most recently. Note that a current EPS
                                                         security context originating from either a mapped or native EPS security context may exist simultaneously with a native
                                                         non-current EPS security context.*/
-#define EMM_AUTHENTICATION_SYNC_FAILURE_MAX   2
-  int                      auth_sync_fail_count;     /* counter of successive AUTHENTICATION FAILURE messages from the UE with EMM cause #21 "synch failure" */
 
   // Requirement MME24.301R10_4.4.2.1_2
   emm_security_context_t   _non_current_security;    /* Non-current EPS security context: A native EPS security context that is not the current one. A non-current EPS
@@ -206,27 +187,12 @@ typedef struct emm_context_s {
                                                         security context does not contain an EPS AS security context. A non-current EPS security context is either of type 'full
                                                         native' or of type 'partial native'.     */
 
-  int                      emm_cause;    /* EMM failure cause code                          */
-
   emm_fsm_state_t          _emm_fsm_state;
 
-  struct nas_timer_s       T3450; /* EMM message retransmission timer */
-  struct nas_timer_s       T3460; /* Authentication timer         */
-  struct nas_timer_s       T3470; /* Identification timer         */
 
   struct esm_context_s     esm_ctx;
 
 
-  ue_network_capability_t  tau_ue_network_capability;         /* stored TAU Request IE Requirement MME24.301R10_5.5.3.2.4_4*/
-  ms_network_capability_t  tau_ms_network_capability;         /* stored TAU Request IE Requirement MME24.301R10_5.5.3.2.4_4*/
-  drx_parameter_t          _current_drx_parameter;            /* stored TAU Request IE Requirement MME24.301R10_5.5.3.2.4_4*/
-  drx_parameter_t          _pending_drx_parameter;            /* stored TAU Request IE Requirement MME24.301R10_5.5.3.2.4_4*/
-  eps_bearer_context_status_t   _eps_bearer_context_status;/* stored TAU Request IE Requirement MME24.301R10_5.5.3.2.4_5*/
-  eps_network_feature_support_t _eps_network_feature_support;
-
-
-  // TODO: DO BETTER  WITH BELOW
-  bstring         esm_msg;      /* ESM message contained within the initial request*/
 #  define EMM_CN_SAP_BUFFER_SIZE 4096
 
 
@@ -259,9 +225,6 @@ typedef struct emm_context_s {
 #define           IS_EMM_CTXT_VALID_MS_NETWORK_CAPABILITY( eMmCtXtPtR )   (!!((eMmCtXtPtR)->member_valid_mask & EMM_CTXT_MEMBER_MS_NETWORK_CAPABILITY_IE))
 
 #define           IS_EMM_CTXT_VALID_AUTH_VECTOR( eMmCtXtPtR, KsI )        (!!((eMmCtXtPtR)->member_valid_mask & ((EMM_CTXT_MEMBER_AUTH_VECTOR0) << KsI)))
-
-  // only one specific procedure running at a given time
-  emm_specific_procedure_data_t         *specific_proc;
 } emm_context_t;
 
 
@@ -286,16 +249,6 @@ typedef struct emm_data_s {
 } emm_data_t;
 
 mme_ue_s1ap_id_t emm_ctx_get_new_ue_id(emm_context_t *ctxt) __attribute__((nonnull));
-
-void emm_ctx_mark_common_procedure_running(emm_context_t * const ctxt, const int attribute_bit_pos) __attribute__ ((nonnull)) __attribute__ ((flatten));
-void emm_ctx_unmark_common_procedure_running(emm_context_t * const ctxt, const int attribute_bit_pos) __attribute__ ((nonnull)) __attribute__ ((flatten));
-bool emm_ctx_is_common_procedure_running(emm_context_t * const ctxt, const int proc_id) __attribute__ ((nonnull)) __attribute__ ((flatten));
-
-
-void emm_ctx_mark_specific_procedure_running(emm_context_t * const ctxt, const int attribute_bit_pos) __attribute__ ((nonnull)) __attribute__ ((flatten));
-void emm_ctx_unmark_specific_procedure_running(emm_context_t * const ctxt, const int attribute_bit_pos) __attribute__ ((nonnull)) __attribute__ ((flatten));
-bool emm_ctx_is_specific_procedure_running(emm_context_t * const ctxt, const int proc_id) __attribute__ ((nonnull)) __attribute__ ((flatten));
-
 
 void emm_ctx_set_attribute_present(emm_context_t * const ctxt, const int attribute_bit_pos) __attribute__ ((nonnull)) __attribute__ ((flatten));
 void emm_ctx_clear_attribute_present(emm_context_t * const ctxt, const int attribute_bit_pos) __attribute__ ((nonnull)) __attribute__ ((flatten));
@@ -347,18 +300,9 @@ void emm_ctx_clear_ms_nw_cap(emm_context_t * const ctxt) __attribute__ ((nonnull
 void emm_ctx_set_ms_nw_cap(emm_context_t * const ctxt, const ms_network_capability_t * const ms_nw_cap_ie);
 void emm_ctx_set_valid_ms_nw_cap(emm_context_t * const ctxt, const ms_network_capability_t * const ms_nw_cap_ie);
 
-void emm_ctx_clear_current_drx_parameter(emm_context_t * const ctxt) __attribute__ ((nonnull)) ;
-void emm_ctx_set_current_drx_parameter(emm_context_t * const ctxt, drx_parameter_t *drx) __attribute__ ((nonnull)) ;
-void emm_ctx_set_valid_current_drx_parameter(emm_context_t * const ctxt, drx_parameter_t *drx) __attribute__ ((nonnull)) ;
-
-void emm_ctx_clear_pending_current_drx_parameter(emm_context_t * const ctxt) __attribute__ ((nonnull)) ;
-void emm_ctx_set_pending_current_drx_parameter(emm_context_t * const ctxt, drx_parameter_t *drx) __attribute__ ((nonnull)) ;
-void emm_ctx_set_valid_pending_current_drx_parameter(emm_context_t * const ctxt, drx_parameter_t *drx) __attribute__ ((nonnull)) ;
-
-void emm_ctx_clear_eps_bearer_context_status(emm_context_t * const ctxt) __attribute__ ((nonnull)) ;
-void emm_ctx_set_eps_bearer_context_status(emm_context_t * const ctxt, eps_bearer_context_status_t *status) __attribute__ ((nonnull)) ;
-void emm_ctx_set_valid_eps_bearer_context_status(emm_context_t * const ctxt, eps_bearer_context_status_t *status) __attribute__ ((nonnull)) ;
-
+void emm_ctx_clear_drx_parameter(emm_context_t * const ctxt) __attribute__ ((nonnull)) ;
+void emm_ctx_set_drx_parameter(emm_context_t * const ctxt, drx_parameter_t *drx) __attribute__ ((nonnull)) ;
+void emm_ctx_set_valid_drx_parameter(emm_context_t * const ctxt, drx_parameter_t *drx) __attribute__ ((nonnull)) ;
 
 struct emm_context_s *emm_context_remove(
   emm_data_t *_emm_data, struct emm_context_s *elm) __attribute__ ((nonnull)) ;
@@ -367,11 +311,15 @@ int  emm_context_add_guti (emm_data_t * emm_data, struct emm_context_s *elm) __a
 int  emm_context_add_old_guti (emm_data_t * emm_data, struct emm_context_s *elm) __attribute__ ((nonnull)) ;
 int  emm_context_add_imsi (emm_data_t * emm_data, struct emm_context_s *elm) __attribute__ ((nonnull)) ;
 
-void emm_context_silently_reset_procedures (struct emm_context_s *emm_ctx) __attribute__ ((nonnull)) ;
+void nas_start_T3450(const mme_ue_s1ap_id_t ue_id, struct nas_timer_s * const T3450,  time_out_t time_out_cb, void *timer_callback_args);
+void nas_start_T3460(const mme_ue_s1ap_id_t ue_id, struct nas_timer_s * const T3460,  time_out_t time_out_cb, void *timer_callback_args);
+void nas_start_T3470(const mme_ue_s1ap_id_t ue_id, struct nas_timer_s * const T3470,  time_out_t time_out_cb, void *timer_callback_args);
+void nas_stop_T3450(const mme_ue_s1ap_id_t ue_id, struct nas_timer_s * const T3450, void *timer_callback_args);
+void nas_stop_T3460(const mme_ue_s1ap_id_t ue_id, struct nas_timer_s * const T3460, void *timer_callback_args);
+void nas_stop_T3470(const mme_ue_s1ap_id_t ue_id, struct nas_timer_s * const T3470, void *timer_callback_args);
 void emm_init_context(struct emm_context_s * const emm_ctx, const bool init_esm_ctxt)  __attribute__ ((nonnull)) ;
-void emm_context_stop_all_timers (struct emm_context_s *emm_ctx) __attribute__ ((nonnull)) ;
-void emm_context_free(struct emm_context_s * const emm_ctx) __attribute__ ((nonnull)) ;
 void emm_context_free_content(struct emm_context_s * const emm_ctx) __attribute__ ((nonnull)) ;
+void emm_context_free_content_except_key_fields(struct emm_context_s * const emm_ctx) __attribute__ ((nonnull)) ;
 void emm_context_dump (const struct emm_context_s * const elm_pP, const uint8_t indent_spaces, bstring bstr_dump) __attribute__ ((nonnull)) ;
 
 void emm_context_dump_all(void);

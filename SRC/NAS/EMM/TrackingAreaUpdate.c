@@ -190,7 +190,7 @@ int emm_proc_tracking_area_update_request (
    */
   if (msg->presencemask & TRACKING_AREA_UPDATE_REQUEST_EPS_BEARER_CONTEXT_STATUS_IEI) {
     if ( emm_ctx) {
-      emm_ctx_set_eps_bearer_context_status(emm_ctx, &msg->epsbearercontextstatus);
+      //emm_ctx_set_eps_bearer_context_status(emm_ctx, &msg->epsbearercontextstatus);
 //#pragma message  "TODO Requirement MME24.301R10_5.5.3.2.4_5a: TAU Request: Deactivate EPS bearers if necessary (S11 Modify Bearer Request)"
     }
   }
@@ -271,23 +271,16 @@ int emm_proc_tracking_area_update_request (
         (0 == decode_status->integrity_protected_message) || (0 == decode_status->security_context_available);
     if (authentication_requested) {
       int                                     eksi = 0;
-      int                                     vindex = 0;
 
       if (emm_ctx->_security.eksi !=  KSI_NO_KEY_AVAILABLE) {
         REQUIREMENT_3GPP_24_301(R10_5_4_2_4__2);
         eksi = (emm_ctx->_security.eksi + 1) % (EKSI_MAX_VALUE + 1);
       }
-      for (vindex = 0; vindex < MAX_EPS_AUTH_VECTORS; vindex++) {
-        if (IS_EMM_CTXT_PRESENT_AUTH_VECTOR(emm_ctx, vindex)) {
-          break;
-        }
-      }
-      AssertFatal(IS_EMM_CTXT_PRESENT_AUTH_VECTOR(emm_ctx, vindex), "TODO No valid vector, should not happen");
-      emm_ctx_set_security_vector_index(emm_ctx, vindex);
+      AssertFatal(IS_EMM_CTXT_VALID_AUTH_VECTOR(emm_ctx, eksi), "TODO No valid vector");
 
       rc = emm_proc_authentication (emm_ctx, ue_mm_context->mme_ue_s1ap_id, eksi,
-          emm_ctx->_vector[vindex].rand,
-          emm_ctx->_vector[vindex].autn,
+          emm_ctx->_vector[eksi%MAX_EPS_AUTH_VECTORS].rand,
+          emm_ctx->_vector[eksi%MAX_EPS_AUTH_VECTORS].autn,
           _emm_tracking_area_update_security,
           _emm_tracking_area_update_reject,
           _emm_tracking_area_update_reject);
@@ -629,13 +622,7 @@ static int _emm_tracking_area_update_accept (
     rc = emm_sap_send (&emm_sap);
 
     if (rc != RETURNerror) {
-      if (emm_context->T3450.id != NAS_TIMER_INACTIVE_ID) {
-        /*
-         * Re-start T3450 timer
-         */
-        emm_context->T3450.id = nas_timer_stop (emm_context->T3450.id);
-        MSC_LOG_EVENT (MSC_NAS_EMM_MME, "T3450 Stopped UE " MME_UE_S1AP_ID_FMT " (TAU)", data->ue_id);
-      }
+      nas_stop_T3450(emm_context);
       /*
        * Start T3450 timer
        */
@@ -667,11 +654,7 @@ static int _emm_tracking_area_update_abort (emm_context_t * emm_context)
       /*
        * Stop timer T3450
        */
-      if (emm_context->T3450.id != NAS_TIMER_INACTIVE_ID) {
-        OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Stop timer T3450 (%ld)", emm_context->T3450.id);
-        emm_context->T3450.id = nas_timer_stop (emm_context->T3450.id);
-        MSC_LOG_EVENT (MSC_NAS_EMM_MME, "T3450 stopped UE " MME_UE_S1AP_ID_FMT " (TAU)", ue_id);
-      }
+      nas_stop_T3450(emm_context);
 
       /*
        * Release retransmission timer parameters

@@ -48,6 +48,7 @@
 #include "log.h"
 #include "obj_hashtable.h"
 #include "3gpp_24.007.h"
+#include "3gpp_24.008.h"
 #include "common_defs.h"
 #include "emm_main.h"
 #include "emm_data.h"

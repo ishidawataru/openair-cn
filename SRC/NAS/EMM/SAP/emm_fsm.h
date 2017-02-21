@@ -40,7 +40,6 @@ Description Defines the EPS Mobility Management procedures executed at
 #ifndef FILE_EMM_FSM_SEEN
 #define FILE_EMM_FSM_SEEN
 
-#include "emm_regDef.h"
 
 /****************************************************************************/
 /*********************  G L O B A L    C O N S T A N T S  *******************/
@@ -65,6 +64,8 @@ typedef enum {
   EMM_COMMON_PROCEDURE_INITIATED,
   EMM_STATE_MAX
 } emm_fsm_state_t;
+
+#include "emm_regDef.h"
 
 /****************************************************************************/
 /********************  G L O B A L    V A R I A B L E S  ********************/

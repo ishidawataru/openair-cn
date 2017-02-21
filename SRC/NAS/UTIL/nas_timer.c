@@ -46,33 +46,24 @@
 
 #include "bstrlib.h"
 
-#include "log.h"
-#include "hashtable.h"
 #include "intertask_interface.h"
 #include "timer.h"
 #include "nas_timer.h"
 #include "commonDef.h"
 #include "common_defs.h"
-#include "msc.h"
 #include "dynamic_memory_check.h"
 
-static hash_table_ts_t *nas_timers = NULL;
+
 
 //------------------------------------------------------------------------------
 int nas_timer_init (void)
 {
-  bstring name = bfromcstr("NAS timers");
-  nas_timers = hashtable_ts_create (256, NULL, NULL, name);
-  if (nas_timers)
-    return (RETURNok);
-  else
-    return (RETURNerror);
+  return (RETURNok);
 }
 
 //------------------------------------------------------------------------------
 void nas_timer_cleanup (void)
 {
-  hashtable_ts_destroy (nas_timers);
 }
 
 //------------------------------------------------------------------------------
@@ -103,22 +94,23 @@ long int nas_timer_start (
     free_wrapper((void*)&nas_itti_timer_arg);
     return (long)NAS_TIMER_INACTIVE_ID;
   }
-  // TODO log if error
-  hashtable_ts_insert (nas_timers, (const hash_key_t) timer_id, (void*)nas_itti_timer_arg);
+
 
   return (timer_id);
 }
 
 //------------------------------------------------------------------------------
-long int nas_timer_stop (long int timer_id)
+long int nas_timer_stop (long int timer_id, void **nas_timer_callback_arg)
 {
-  int rc = timer_remove (timer_id);
-  if (!rc) {
-    // TODO log if error
-    hashtable_ts_free (nas_timers, (const hash_key_t) timer_id);
-    return (NAS_TIMER_INACTIVE_ID);
+  nas_itti_timer_arg_t                   *nas_itti_timer_arg = NULL;
+  timer_remove (timer_id, (void**)&nas_itti_timer_arg);
+  if (nas_itti_timer_arg) {
+    *nas_timer_callback_arg = nas_itti_timer_arg->nas_timer_callback_arg;
+    free_wrapper((void**)&nas_itti_timer_arg);
+  } else {
+    *nas_timer_callback_arg = NULL;
   }
-  return timer_id;
+  return (NAS_TIMER_INACTIVE_ID);
 }
 
 //------------------------------------------------------------------------------
@@ -128,6 +120,6 @@ void nas_timer_handle_signal_expiry (long timer_id, nas_itti_timer_arg_t *nas_it
    * Get the timer entry for which the system timer expired
    */
   nas_itti_timer_arg->nas_timer_callback (nas_itti_timer_arg->nas_timer_callback_arg);
-  // TODO log if error
-  hashtable_ts_free (nas_timers, (const hash_key_t) timer_id);
+  // assuming timer type is TIMER_ONE_SHOT
+  free_wrapper((void**)nas_itti_timer_arg);
 }

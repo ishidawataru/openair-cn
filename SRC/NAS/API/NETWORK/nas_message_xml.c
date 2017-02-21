@@ -251,8 +251,8 @@ bool nas_pdu_from_xml (
 void nas_pdu_to_xml (bstring bnas_pdu, xmlTextWriterPtr writer)
 {
   OAILOG_FUNC_IN (LOG_XML);
-  unsigned char                          *buffer = (unsigned char*)bdata(bnas_pdu);
-  size_t                                  length = blength(bnas_pdu);
+  unsigned char                          *buffer = NULL;
+  size_t                                  length = 0;
   emm_security_context_t                 *emm_security_context = NULL; // TODO maybe later
   uint32_t                                mac   = 0;
   int                                     size  = 0;
@@ -262,9 +262,15 @@ void nas_pdu_to_xml (bstring bnas_pdu, xmlTextWriterPtr writer)
                                                      .security_protected.plain.emm.header = {0},
                                                      .security_protected.plain.esm.header = {0}};
 
-  AssertFatal((bdata(bnas_pdu))&& (0<blength(bnas_pdu)), "No PDU to dump");
-  // Decode the header
-  size  = nas_message_header_decode (buffer, &nas_msg.header, length, &decode_status, &is_sr);
+  if ((bnas_pdu) && (0< blength(bnas_pdu))){
+    buffer= (unsigned char*)bdata(bnas_pdu);
+    length = blength(bnas_pdu);
+    // Decode the header
+    size  = nas_message_header_decode (buffer, &nas_msg.header, length, &decode_status, &is_sr);
+  } else {
+    OAILOG_WARNING(LOG_XML, "No NAS buffer to decode\n");
+    OAILOG_FUNC_OUT (LOG_XML);
+  }
 
   if (size < 0) {
     OAILOG_WARNING(LOG_XML, "Message header %lu bytes is too short\n", length);

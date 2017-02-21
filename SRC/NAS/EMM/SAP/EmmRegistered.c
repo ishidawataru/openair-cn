@@ -98,6 +98,12 @@ EmmRegistered (
   assert (emm_fsm_get_state (evt->ctx) == EMM_REGISTERED);
 
   switch (evt->primitive) {
+
+  case EMMREG_ATTACH_ABORT:
+    AssertFatal(0, "TODO");
+    break;
+
+
   case _EMMREG_DETACH_REQ:
     /*
      * Network detach has been requested (implicit detach);

@@ -71,39 +71,6 @@ mme_ue_s1ap_id_t emm_ctx_get_new_ue_id(emm_context_t *ctxt)
   return tmp;
 }
 
-//------------------------------------------------------------------------------
-inline void emm_ctx_mark_common_procedure_running(emm_context_t * const ctxt, const int proc_id)
-{
-  __sync_fetch_and_or(&ctxt->common_proc_mask, proc_id);
-}
-
-inline void emm_ctx_unmark_common_procedure_running(emm_context_t * const ctxt, const int proc_id)
-{
-  __sync_fetch_and_and(&ctxt->common_proc_mask, ~proc_id);
-}
-
-inline bool emm_ctx_is_common_procedure_running(emm_context_t * const ctxt, const int proc_id)
-{
-  if ((ctxt) && (ctxt->common_proc_mask & proc_id)) return true;
-  return false;
-}
-
-inline void emm_ctx_mark_specific_procedure_running(emm_context_t * const ctxt, const int proc_id)
-{
-  __sync_fetch_and_or(&ctxt->specific_proc_mask, proc_id);
-}
-
-inline void emm_ctx_unmark_specific_procedure_running(emm_context_t * const ctxt, const int proc_id)
-{
-  __sync_fetch_and_and(&ctxt->specific_proc_mask, ~proc_id);
-}
-
-inline bool emm_ctx_is_specific_procedure_running(emm_context_t * const ctxt, const int proc_id)
-{
-  if ((ctxt) && (ctxt->specific_proc_mask & proc_id)) return true;
-  return false;
-}
-
 
 //------------------------------------------------------------------------------
 inline void emm_ctx_set_attribute_present(emm_context_t * const ctxt, const int attribute_bit_pos)
@@ -311,15 +278,13 @@ inline void emm_ctx_clear_auth_vectors(emm_context_t * const ctxt)
     memset((void *)&ctxt->_vector[i], 0, sizeof(ctxt->_vector[i]));
     emm_ctx_clear_attribute_present(ctxt, EMM_CTXT_MEMBER_AUTH_VECTOR0+i);
   }
-  emm_ctx_clear_security_vector_index(ctxt);
   OAILOG_DEBUG (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " cleared auth vectors \n", (PARENT_STRUCT(ctxt, struct ue_mm_context_s, emm_context))->mme_ue_s1ap_id);
 }
 //------------------------------------------------------------------------------
 /* Clear AUTH vector  */
 inline void emm_ctx_clear_auth_vector(emm_context_t * const ctxt, ksi_t eksi)
 {
-  AssertFatal(eksi < MAX_EPS_AUTH_VECTORS, "Out of bounds eksi %d", eksi);
-  memset((void *)&ctxt->_vector[eksi], 0, sizeof(ctxt->_vector[eksi]));
+  memset((void *)&ctxt->_vector[eksi%MAX_EPS_AUTH_VECTORS], 0, sizeof(ctxt->_vector[eksi%MAX_EPS_AUTH_VECTORS]));
   emm_ctx_clear_attribute_present(ctxt, EMM_CTXT_MEMBER_AUTH_VECTOR0+eksi);
   int remaining_vectors = 0;
   for (int i = 0; i < MAX_EPS_AUTH_VECTORS; i++) {
@@ -331,7 +296,6 @@ inline void emm_ctx_clear_auth_vector(emm_context_t * const ctxt, ksi_t eksi)
   OAILOG_DEBUG (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " cleared auth vector %u \n", (PARENT_STRUCT(ctxt, struct ue_mm_context_s, emm_context))->mme_ue_s1ap_id, eksi);
   if (!(remaining_vectors)) {
     emm_ctx_clear_attribute_present(ctxt, EMM_CTXT_MEMBER_AUTH_VECTORS);
-    emm_ctx_clear_security_vector_index(ctxt);
     OAILOG_DEBUG (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " cleared auth vectors\n", (PARENT_STRUCT(ctxt, struct ue_mm_context_s, emm_context))->mme_ue_s1ap_id);
   }
 }
@@ -342,7 +306,6 @@ inline void emm_ctx_clear_security(emm_context_t * const ctxt)
   memset (&ctxt->_security, 0, sizeof (ctxt->_security));
   emm_ctx_set_security_type(ctxt, SECURITY_CTX_TYPE_NOT_AVAILABLE);
   emm_ctx_set_security_eksi(ctxt, KSI_NO_KEY_AVAILABLE);
-  emm_ctx_clear_security_vector_index(ctxt);
   ctxt->_security.selected_algorithms.encryption = NAS_SECURITY_ALGORITHMS_EEA0;
   ctxt->_security.selected_algorithms.integrity  = NAS_SECURITY_ALGORITHMS_EIA0;
   emm_ctx_clear_attribute_present(ctxt, EMM_CTXT_MEMBER_SECURITY);
@@ -365,19 +328,6 @@ inline void emm_ctx_set_security_eksi(emm_context_t * const ctxt, ksi_t eksi)
   OAILOG_TRACE (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " set security context eksi %d\n", (PARENT_STRUCT(ctxt, struct ue_mm_context_s, emm_context))->mme_ue_s1ap_id, eksi);
 }
 
-//------------------------------------------------------------------------------
-inline void emm_ctx_clear_security_vector_index(emm_context_t * const ctxt)
-{
-  ctxt->_security.vector_index = EMM_SECURITY_VECTOR_INDEX_INVALID;
-  OAILOG_TRACE (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " clear security context vector index\n", (PARENT_STRUCT(ctxt, struct ue_mm_context_s, emm_context))->mme_ue_s1ap_id);
-}
-//------------------------------------------------------------------------------
-inline void emm_ctx_set_security_vector_index(emm_context_t * const ctxt, int vector_index)
-{
-  ctxt->_security.vector_index = vector_index;
-  OAILOG_TRACE (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " set security context vector index %d\n", (PARENT_STRUCT(ctxt, struct ue_mm_context_s, emm_context))->mme_ue_s1ap_id, vector_index);
-}
-
 
 //------------------------------------------------------------------------------
 /* Clear non current security  */
@@ -386,25 +336,12 @@ inline void emm_ctx_clear_non_current_security(emm_context_t * const ctxt)
   memset (&ctxt->_non_current_security, 0, sizeof (ctxt->_non_current_security));
   ctxt->_non_current_security.sc_type      = SECURITY_CTX_TYPE_NOT_AVAILABLE;
   ctxt->_non_current_security.eksi         = KSI_NO_KEY_AVAILABLE;
-  emm_ctx_clear_non_current_security_vector_index(ctxt);
   ctxt->_non_current_security.selected_algorithms.encryption = NAS_SECURITY_ALGORITHMS_EEA0;
   ctxt->_non_current_security.selected_algorithms.integrity  = NAS_SECURITY_ALGORITHMS_EIA0;
   emm_ctx_clear_attribute_present(ctxt, EMM_CTXT_MEMBER_NON_CURRENT_SECURITY);
   ctxt->_security.direction_decode = SECU_DIRECTION_UPLINK;
   ctxt->_security.direction_encode = SECU_DIRECTION_DOWNLINK;
   OAILOG_DEBUG (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " cleared non current security context \n", (PARENT_STRUCT(ctxt, struct ue_mm_context_s, emm_context))->mme_ue_s1ap_id);
-}
-//------------------------------------------------------------------------------
-inline void emm_ctx_clear_non_current_security_vector_index(emm_context_t * const ctxt)
-{
-  ctxt->_non_current_security.vector_index = EMM_SECURITY_VECTOR_INDEX_INVALID;
-  OAILOG_TRACE (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " clear non current security context vector index\n", (PARENT_STRUCT(ctxt, struct ue_mm_context_s, emm_context))->mme_ue_s1ap_id);
-}
-//------------------------------------------------------------------------------
-inline void emm_ctx_set_non_current_security_vector_index(emm_context_t * const ctxt, int vector_index)
-{
-  ctxt->_non_current_security.vector_index = vector_index;
-  OAILOG_TRACE (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " set non current security context vector index %d\n", (PARENT_STRUCT(ctxt, struct ue_mm_context_s, emm_context))->mme_ue_s1ap_id, vector_index);
 }
 
 //------------------------------------------------------------------------------
@@ -460,79 +397,28 @@ inline void emm_ctx_set_valid_ms_nw_cap(emm_context_t * const ctxt, const ms_net
 
 //------------------------------------------------------------------------------
 /* Clear current DRX parameter   */
-inline void emm_ctx_clear_current_drx_parameter(emm_context_t * const ctxt)
+inline void emm_ctx_clear_drx_parameter(emm_context_t * const ctxt)
 {
-  memset (&ctxt->_current_drx_parameter, 0, sizeof (ctxt->_current_drx_parameter));
+  memset(&ctxt->_drx_parameter, 0, sizeof(drx_parameter_t));
   emm_ctx_clear_attribute_present(ctxt, EMM_CTXT_MEMBER_CURRENT_DRX_PARAMETER);
   OAILOG_DEBUG (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " cleared current DRX parameter\n", (PARENT_STRUCT(ctxt, struct ue_mm_context_s, emm_context))->mme_ue_s1ap_id);
 }
 
 /* Set current DRX parameter */
-inline void emm_ctx_set_current_drx_parameter(emm_context_t * const ctxt, drx_parameter_t *drx)
+inline void emm_ctx_set_drx_parameter(emm_context_t * const ctxt, drx_parameter_t *drx)
 {
-  ctxt->_current_drx_parameter = *drx;
+  memcpy(&ctxt->_drx_parameter, drx, sizeof(drx_parameter_t));
   emm_ctx_set_attribute_present(ctxt, EMM_CTXT_MEMBER_CURRENT_DRX_PARAMETER);
   OAILOG_DEBUG (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " set current DRX parameter (present)\n", (PARENT_STRUCT(ctxt, struct ue_mm_context_s, emm_context))->mme_ue_s1ap_id);
 }
 
 /* Set current DRX parameter, mark it as valid */
-inline void emm_ctx_set_valid_current_drx_parameter(emm_context_t * const ctxt, drx_parameter_t *drx)
+inline void emm_ctx_set_valid_drx_parameter(emm_context_t * const ctxt, drx_parameter_t *drx)
 {
-  ctxt->_current_drx_parameter = *drx;
+  emm_ctx_set_drx_parameter(ctxt, drx);
   emm_ctx_set_attribute_valid(ctxt, EMM_CTXT_MEMBER_CURRENT_DRX_PARAMETER);
   OAILOG_DEBUG (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " set current DRX parameter (valid)\n", (PARENT_STRUCT(ctxt, struct ue_mm_context_s, emm_context))->mme_ue_s1ap_id);
 }
-
-//------------------------------------------------------------------------------
-/* Clear non current DRX parameter   */
-inline void emm_ctx_clear_pending_current_drx_parameter(emm_context_t * const ctxt)
-{
-  memset (&ctxt->_pending_drx_parameter, 0, sizeof (ctxt->_pending_drx_parameter));
-  emm_ctx_clear_attribute_present(ctxt, EMM_CTXT_MEMBER_PENDING_DRX_PARAMETER);
-  OAILOG_DEBUG (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " cleared pending DRX parameter\n", (PARENT_STRUCT(ctxt, struct ue_mm_context_s, emm_context))->mme_ue_s1ap_id);
-}
-
-/* Set current DRX parameter */
-inline void emm_ctx_set_pending_current_drx_parameter(emm_context_t * const ctxt, drx_parameter_t *drx)
-{
-  ctxt->_pending_drx_parameter = *drx;
-  emm_ctx_set_attribute_present(ctxt, EMM_CTXT_MEMBER_PENDING_DRX_PARAMETER);
-  OAILOG_DEBUG (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " set pending DRX parameter (present)\n", (PARENT_STRUCT(ctxt, struct ue_mm_context_s, emm_context))->mme_ue_s1ap_id);
-}
-
-/* Set current DRX parameter, mark it as valid */
-inline void emm_ctx_set_valid_pending_current_drx_parameter(emm_context_t * const ctxt, drx_parameter_t *drx)
-{
-  ctxt->_pending_drx_parameter = *drx;
-  emm_ctx_set_attribute_valid(ctxt, EMM_CTXT_MEMBER_PENDING_DRX_PARAMETER);
-  OAILOG_DEBUG (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " set pending DRX parameter (valid)\n", (PARENT_STRUCT(ctxt, struct ue_mm_context_s, emm_context))->mme_ue_s1ap_id);
-}
-
-//------------------------------------------------------------------------------
-/* Clear EPS bearer context status   */
-inline void emm_ctx_clear_eps_bearer_context_status(emm_context_t * const ctxt)
-{
-  memset (&ctxt->_eps_bearer_context_status, 0, sizeof (ctxt->_eps_bearer_context_status));
-  emm_ctx_clear_attribute_present(ctxt, EMM_CTXT_MEMBER_EPS_BEARER_CONTEXT_STATUS);
-  OAILOG_DEBUG (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " cleared EPS bearer context status\n", (PARENT_STRUCT(ctxt, struct ue_mm_context_s, emm_context))->mme_ue_s1ap_id);
-}
-
-/* Set current DRX parameter */
-inline void emm_ctx_set_eps_bearer_context_status(emm_context_t * const ctxt, eps_bearer_context_status_t *status)
-{
-  ctxt->_eps_bearer_context_status = *status;
-  emm_ctx_set_attribute_present(ctxt, EMM_CTXT_MEMBER_EPS_BEARER_CONTEXT_STATUS);
-  OAILOG_DEBUG (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " set EPS bearer context status (present)\n", (PARENT_STRUCT(ctxt, struct ue_mm_context_s, emm_context))->mme_ue_s1ap_id);
-}
-
-/* Set current DRX parameter, mark it as valid */
-inline void emm_ctx_set_valid_eps_bearer_context_status(emm_context_t * const ctxt, eps_bearer_context_status_t *status)
-{
-  ctxt->_eps_bearer_context_status = *status;
-  emm_ctx_set_attribute_valid(ctxt, EMM_CTXT_MEMBER_EPS_BEARER_CONTEXT_STATUS);
-  OAILOG_DEBUG (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " set EPS bearer context status (valid)\n", (PARENT_STRUCT(ctxt, struct ue_mm_context_s, emm_context))->mme_ue_s1ap_id);
-}
-
 
 //------------------------------------------------------------------------------
 struct emm_context_s              *
@@ -632,134 +518,130 @@ emm_context_add_imsi (
 //------------------------------------------------------------------------------
 void emm_init_context(struct emm_context_s * const emm_ctx, const bool init_esm_ctxt)
 {
-    emm_ctx->emm_cause       = EMM_CAUSE_SUCCESS;
-    emm_ctx->_emm_fsm_state = EMM_INVALID;
-    emm_ctx->T3450.id        = NAS_TIMER_INACTIVE_ID;
-    emm_ctx->T3450.sec       = mme_config.nas_config.t3450_sec;
-    emm_ctx->T3460.id        = NAS_TIMER_INACTIVE_ID;
-    emm_ctx->T3460.sec       = mme_config.nas_config.t3460_sec;
-    emm_ctx->T3470.id        = NAS_TIMER_INACTIVE_ID;
-    emm_ctx->T3470.sec       = mme_config.nas_config.t3470_sec;
-    struct ue_mm_context_s * ue_mm_context = PARENT_STRUCT(emm_ctx, struct ue_mm_context_s, emm_context);
-    OAILOG_DEBUG (LOG_NAS_EMM, "EMM-CTX - Init UE id " MME_UE_S1AP_ID_FMT "\n", ue_mm_context->mme_ue_s1ap_id);
-    emm_fsm_set_state (ue_mm_context->mme_ue_s1ap_id, emm_ctx, EMM_DEREGISTERED);
+  emm_ctx->_emm_fsm_state  = EMM_INVALID;
 
-    emm_ctx_clear_guti(emm_ctx);
-    emm_ctx_clear_old_guti(emm_ctx);
-    emm_ctx_clear_imsi(emm_ctx);
-    emm_ctx_clear_imei(emm_ctx);
-    emm_ctx_clear_imeisv(emm_ctx);
-    emm_ctx_clear_lvr_tai(emm_ctx);
-    emm_ctx_clear_security(emm_ctx);
-    emm_ctx_clear_non_current_security(emm_ctx);
-    emm_ctx_clear_auth_vectors(emm_ctx);
-    emm_ctx_clear_ms_nw_cap(emm_ctx);
-    emm_ctx_clear_ue_nw_cap(emm_ctx);
-    emm_ctx_clear_current_drx_parameter(emm_ctx);
-    emm_ctx_clear_pending_current_drx_parameter(emm_ctx);
-    emm_ctx_clear_eps_bearer_context_status(emm_ctx);
+  struct ue_mm_context_s * ue_mm_context = PARENT_STRUCT(emm_ctx, struct ue_mm_context_s, emm_context);
+  OAILOG_DEBUG (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT " Init EMM-CTX\n", ue_mm_context->mme_ue_s1ap_id);
+  emm_fsm_set_state (ue_mm_context->mme_ue_s1ap_id, emm_ctx, EMM_DEREGISTERED);
 
-    if (init_esm_ctxt) {
-      esm_init_context(&emm_ctx->esm_ctx);
-    }
-}
+  emm_ctx_clear_guti(emm_ctx);
+  emm_ctx_clear_old_guti(emm_ctx);
+  emm_ctx_clear_imsi(emm_ctx);
+  emm_ctx_clear_imei(emm_ctx);
+  emm_ctx_clear_imeisv(emm_ctx);
+  emm_ctx_clear_lvr_tai(emm_ctx);
+  emm_ctx_clear_security(emm_ctx);
+  emm_ctx_clear_non_current_security(emm_ctx);
+  emm_ctx_clear_auth_vectors(emm_ctx);
+  emm_ctx_clear_ms_nw_cap(emm_ctx);
+  emm_ctx_clear_ue_nw_cap(emm_ctx);
+  emm_ctx_clear_drx_parameter(emm_ctx);
 
-//------------------------------------------------------------------------------
-void emm_context_stop_all_timers (struct emm_context_s *emm_ctx)
-{
-  if (emm_ctx ) {
-    /*
-     * Stop timer T3450
-     */
-    if (emm_ctx->T3450.id != NAS_TIMER_INACTIVE_ID) {
-      OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Stop timer T3450 (%ld)\n", emm_ctx->T3450.id);
-      emm_ctx->T3450.id = nas_timer_stop (emm_ctx->T3450.id);
-      if (NAS_TIMER_INACTIVE_ID == emm_ctx->T3450.id) {
-        MSC_LOG_EVENT (MSC_NAS_EMM_MME, "0 T3450 stopped UE " MME_UE_S1AP_ID_FMT " ", (PARENT_STRUCT(emm_ctx, struct ue_mm_context_s, emm_context))->mme_ue_s1ap_id);
-        OAILOG_DEBUG (LOG_NAS_EMM, "T3450 stopped UE " MME_UE_S1AP_ID_FMT " ", (PARENT_STRUCT(emm_ctx, struct ue_mm_context_s, emm_context))->mme_ue_s1ap_id);
-      } else {
-        OAILOG_ERROR (LOG_NAS_EMM, "Could not stop T3450 stopped UE " MME_UE_S1AP_ID_FMT " ", (PARENT_STRUCT(emm_ctx, struct ue_mm_context_s, emm_context))->mme_ue_s1ap_id);
-      }
-    }
-
-    /*
-     * Stop timer T3460
-     */
-    if (emm_ctx->T3460.id != NAS_TIMER_INACTIVE_ID) {
-      OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Stop timer T3460 (%ld)\n", emm_ctx->T3460.id);
-      emm_ctx->T3460.id = nas_timer_stop (emm_ctx->T3460.id);
-      if (NAS_TIMER_INACTIVE_ID == emm_ctx->T3460.id) {
-        MSC_LOG_EVENT (MSC_NAS_EMM_MME, "0 T3460 stopped UE " MME_UE_S1AP_ID_FMT " ", (PARENT_STRUCT(emm_ctx, struct ue_mm_context_s, emm_context))->mme_ue_s1ap_id);
-        OAILOG_DEBUG (LOG_NAS_EMM, "T3460 stopped UE " MME_UE_S1AP_ID_FMT " ", (PARENT_STRUCT(emm_ctx, struct ue_mm_context_s, emm_context))->mme_ue_s1ap_id);
-      } else {
-        OAILOG_ERROR (LOG_NAS_EMM, "Could not stop T3460 stopped UE " MME_UE_S1AP_ID_FMT " ", (PARENT_STRUCT(emm_ctx, struct ue_mm_context_s, emm_context))->mme_ue_s1ap_id);
-      }
-    }
-
-    /*
-     * Stop timer T3470
-     */
-    if (emm_ctx->T3470.id != NAS_TIMER_INACTIVE_ID) {
-      OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Stop timer T3470 (%ld)\n", emm_ctx->T3460.id);
-      emm_ctx->T3470.id = nas_timer_stop (emm_ctx->T3470.id);
-      if (NAS_TIMER_INACTIVE_ID == emm_ctx->T3470.id) {
-        MSC_LOG_EVENT (MSC_NAS_EMM_MME, "0 T3470 stopped UE " MME_UE_S1AP_ID_FMT " ", (PARENT_STRUCT(emm_ctx, struct ue_mm_context_s, emm_context))->mme_ue_s1ap_id);
-        OAILOG_DEBUG (LOG_NAS_EMM, "T3470 stopped UE " MME_UE_S1AP_ID_FMT " ", (PARENT_STRUCT(emm_ctx, struct ue_mm_context_s, emm_context))->mme_ue_s1ap_id);
-      } else {
-        OAILOG_ERROR (LOG_NAS_EMM, "Could not stop T3470 stopped UE " MME_UE_S1AP_ID_FMT " ", (PARENT_STRUCT(emm_ctx, struct ue_mm_context_s, emm_context))->mme_ue_s1ap_id);
-      }
-    }
+  if (init_esm_ctxt) {
+    esm_init_context(&emm_ctx->esm_ctx);
   }
 }
 
 //------------------------------------------------------------------------------
-void emm_context_silently_reset_procedures(
-    struct emm_context_s * const emm_ctx)
+void nas_start_T3450(const mme_ue_s1ap_id_t ue_id, struct nas_timer_s * const T3450,  time_out_t time_out_cb, void *timer_callback_args)
 {
-  OAILOG_FUNC_IN (LOG_NAS_EMM);
-  if (emm_ctx) {
-    emm_context_stop_all_timers(emm_ctx);
-    if (emm_ctx->common_proc) {
-      emm_common_cleanup(&emm_ctx->common_proc);
+  if ((T3450) && (T3450->id == NAS_TIMER_INACTIVE_ID)) {
+    T3450->id = nas_timer_start (T3450->sec, 0, time_out_cb, &timer_callback_args);
+    if (NAS_TIMER_INACTIVE_ID != T3450->id) {
+      MSC_LOG_EVENT (MSC_NAS_EMM_MME, "0 T3450 started UE " MME_UE_S1AP_ID_FMT " ", ue_id);
+      OAILOG_DEBUG (LOG_NAS_EMM, "T3450 started UE " MME_UE_S1AP_ID_FMT " ", ue_id);
+    } else {
+      OAILOG_ERROR (LOG_NAS_EMM, "Could not start T3450 UE " MME_UE_S1AP_ID_FMT " ", ue_id);
     }
-    emm_ctx_unmark_common_procedure_running(emm_ctx, EMM_CTXT_COMMON_PROC_GUTI | EMM_CTXT_COMMON_PROC_AUTH  |
-                                                     EMM_CTXT_COMMON_PROC_SMC  | EMM_CTXT_COMMON_PROC_IDENT |
-                                                     EMM_CTXT_COMMON_PROC_INFO);
-    emm_ctx_unmark_specific_procedure_running(emm_ctx, EMM_CTXT_SPEC_PROC_ATTACH | EMM_CTXT_SPEC_PROC_ATTACH_ACCEPT_SENT |
-                                                       EMM_CTXT_SPEC_PROC_ATTACH_REJECT_SENT | EMM_CTXT_SPEC_PROC_TAU    |
-                                                       EMM_CTXT_SPEC_PROC_TAU_ACCEPT_SENT    | EMM_CTXT_SPEC_PROC_TAU_REJECT_SENT |
-                                                       EMM_CTXT_SPEC_PROC_MME_INITIATED_DETACH_SENT);
   }
-  OAILOG_FUNC_OUT (LOG_NAS_EMM);
 }
 //------------------------------------------------------------------------------
-void emm_context_free(struct emm_context_s * const emm_ctx)
+void nas_start_T3460(const mme_ue_s1ap_id_t ue_id, struct nas_timer_s * const T3460,  time_out_t time_out_cb, void *timer_callback_args)
 {
-  if (emm_ctx ) {
-    if (emm_ctx->esm_msg) {
-      bdestroy_wrapper (&emm_ctx->esm_msg);
+  if ((T3460) && (T3460->id == NAS_TIMER_INACTIVE_ID)) {
+    T3460->id = nas_timer_start (T3460->sec, 0, time_out_cb, &timer_callback_args);
+    if (NAS_TIMER_INACTIVE_ID != T3460->id) {
+      MSC_LOG_EVENT (MSC_NAS_EMM_MME, "0 T3460 started UE " MME_UE_S1AP_ID_FMT " ", ue_id);
+      OAILOG_DEBUG (LOG_NAS_EMM, "T3460 started UE " MME_UE_S1AP_ID_FMT " ", ue_id);
+    } else {
+      OAILOG_ERROR (LOG_NAS_EMM, "Could not start T3460 UE " MME_UE_S1AP_ID_FMT " ", ue_id);
     }
-
-    emm_context_stop_all_timers(emm_ctx);
-
-    // NO need:free_esm_data_context(&emm_ctx->esm_ctx);
-    free_wrapper((void**)&emm_ctx);
   }
 }
+//------------------------------------------------------------------------------
+void nas_start_T3470(const mme_ue_s1ap_id_t ue_id, struct nas_timer_s * const T3470,  time_out_t time_out_cb, void *timer_callback_args)
+{
+  if ((T3470) && (T3470->id == NAS_TIMER_INACTIVE_ID)) {
+    T3470->id = nas_timer_start (T3470->sec, 0, time_out_cb, &timer_callback_args);
+    if (NAS_TIMER_INACTIVE_ID != T3470->id) {
+      MSC_LOG_EVENT (MSC_NAS_EMM_MME, "0 T3470 started UE " MME_UE_S1AP_ID_FMT " ", ue_id);
+      OAILOG_DEBUG (LOG_NAS_EMM, "T3470 started UE " MME_UE_S1AP_ID_FMT " ", ue_id);
+    } else {
+      OAILOG_ERROR (LOG_NAS_EMM, "Could not start T3470 UE " MME_UE_S1AP_ID_FMT " ", ue_id);
+    }
+  }
+}
+//------------------------------------------------------------------------------
+void nas_stop_T3450(const mme_ue_s1ap_id_t ue_id, struct nas_timer_s * const T3450, void *timer_callback_args)
+{
+  if ((T3450) && (T3450->id != NAS_TIMER_INACTIVE_ID)) {
+    T3450->id = nas_timer_stop(T3450->id, &timer_callback_args);
+    MSC_LOG_EVENT (MSC_NAS_EMM_MME, "0 T3450 stopped UE " MME_UE_S1AP_ID_FMT " ", ue_id);
+    OAILOG_DEBUG (LOG_NAS_EMM, "T3450 stopped UE " MME_UE_S1AP_ID_FMT " ", ue_id);
+  }
+}
+
+//------------------------------------------------------------------------------
+void nas_stop_T3460(const mme_ue_s1ap_id_t ue_id, struct nas_timer_s * const T3460, void *timer_callback_args)
+{
+  if ((T3460) && (T3460->id != NAS_TIMER_INACTIVE_ID)) {
+    T3460->id = nas_timer_stop(T3460->id, &timer_callback_args);
+    MSC_LOG_EVENT (MSC_NAS_EMM_MME, "0 T3460 stopped UE " MME_UE_S1AP_ID_FMT " ", ue_id);
+    OAILOG_DEBUG (LOG_NAS_EMM, "T3460 stopped UE " MME_UE_S1AP_ID_FMT " ", ue_id);
+  }
+}
+
+//------------------------------------------------------------------------------
+void nas_stop_T3470(const mme_ue_s1ap_id_t ue_id, struct nas_timer_s * const T3470, void *timer_callback_args)
+{
+  if ((T3470) && (T3470->id != NAS_TIMER_INACTIVE_ID)) {
+    T3470->id = nas_timer_stop(T3470->id, &timer_callback_args);
+    MSC_LOG_EVENT (MSC_NAS_EMM_MME, "0 T3470 stopped UE " MME_UE_S1AP_ID_FMT " ", ue_id);
+    OAILOG_DEBUG (LOG_NAS_EMM, "T3470 stopped UE " MME_UE_S1AP_ID_FMT " ", ue_id);
+  }
+}
+
 
 //------------------------------------------------------------------------------
 void emm_context_free_content(struct emm_context_s * const emm_ctx)
 {
-  if (emm_ctx ) {
-    if (emm_ctx->esm_msg) {
-      bdestroy_wrapper (&emm_ctx->esm_msg);
-    }
-
-    emm_context_stop_all_timers(emm_ctx);
-
-    // no need: esm_data_context_free_content(&emm_ctx->esm_ctx);
+  if (emm_ctx) {
+    emm_context_free_content_except_key_fields(emm_ctx);
 
     memset(emm_ctx, 0, sizeof(*emm_ctx));
+  }
+}
+
+//------------------------------------------------------------------------------
+void emm_context_free_content_except_key_fields(struct emm_context_s * const emm_ctx)
+{
+  if (emm_ctx) {
+
+    nas_delete_all_emm_procedures(emm_ctx);
+    //emm_ctx_clear_old_guti(emm_ctx);
+    //emm_ctx_clear_guti(emm_ctx);
+    //emm_ctx_clear_imsi(emm_ctx);
+    //emm_ctx_clear_imei(emm_ctx);
+    //emm_ctx_clear_imeisv(emm_ctx);
+    emm_ctx_clear_auth_vectors(emm_ctx);
+    emm_ctx_clear_security(emm_ctx);
+    emm_ctx_clear_non_current_security(emm_ctx);
+    emm_ctx_clear_drx_parameter(emm_ctx);
+    if (emm_ctx->ue_radio_capability_information) {
+      bdestroy_wrapper (&emm_ctx->ue_radio_capability_information);
+    }
+
+    // TODO esm_data_context_free_content(&emm_ctx->esm_ctx);
   }
 }
 
@@ -971,41 +853,6 @@ void emm_context_dump (
     }
 
     bformata (bstr_dump, "%*s     - EMM state:     %s\n", indent_spaces, " ", emm_fsm_get_state_str(emm_context));
-    bformata (bstr_dump, "%*s     - Timers : T3450      T3460     T3470\n", indent_spaces, " ");
-    bformata (bstr_dump, "%*s                %s   %s  %s\n", indent_spaces, " ",
-        (NAS_TIMER_INACTIVE_ID != emm_context->T3450.id) ? "Running ":"Inactive",
-        (NAS_TIMER_INACTIVE_ID != emm_context->T3460.id) ? "Running ":"Inactive",
-        (NAS_TIMER_INACTIVE_ID != emm_context->T3470.id) ? "Running ":"Inactive");
-
-    if (emm_context->esm_msg) {
-      bformata (bstr_dump, "%*s     - Pending ESM msg :\n", indent_spaces, " ");
-      bformata (bstr_dump, "%*s     +-----+-------------------------------------------------+\n", indent_spaces, " ");
-      bformata (bstr_dump, "%*s     |     |  0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f |\n", indent_spaces, " ");
-      bformata (bstr_dump, "%*s     |-----|-------------------------------------------------|\n", indent_spaces, " ");
-
-      int octet_index;
-      for (octet_index = 0; octet_index < blength(emm_context->esm_msg); octet_index++) {
-        if ((octet_index % 16) == 0) {
-          if (octet_index != 0) {
-            bformata (bstr_dump, " |\n");
-          }
-          bformata (bstr_dump, "%*s     |%04ld |", indent_spaces, " ", octet_index);
-        }
-
-        /*
-         * Print every single octet in hexadecimal form
-         */
-        bformata (bstr_dump, " %02x", emm_context->esm_msg->data[octet_index]);
-      }
-      /*
-       * Append enough spaces and put final pipe
-       */
-      for (int index = octet_index%16; index < 16; ++index) {
-        bformata (bstr_dump, "   ");
-      }
-      bformata (bstr_dump, " |\n");
-      bformata (bstr_dump, "%*s     +-----+-------------------------------------------------+\n", indent_spaces, " ");
-    }
     bformata (bstr_dump, "%*s     - TODO  esm_data_ctx\n", indent_spaces, " ");
     //esm_context_dump(&emm_context->esm_ctx, indent_spaces, bstr_dump);
   }

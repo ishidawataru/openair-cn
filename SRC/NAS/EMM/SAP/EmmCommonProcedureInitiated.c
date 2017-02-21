@@ -104,19 +104,27 @@ EmmCommonProcedureInitiated (
   assert (emm_fsm_get_state (emm_ctx) == EMM_COMMON_PROCEDURE_INITIATED);
 
   switch (evt->primitive) {
-  case _EMMREG_PROC_ABORT:
-    /*
-     * The EMM procedure that initiated EMM common procedure aborted
-     */
-    if (emm_ctx) {
-      //tricky:
-      if (emm_ctx->common_proc) { // assume cleaned if terminated
-        rc = emm_proc_common_abort (&emm_ctx->common_proc);
-        emm_fsm_set_state(evt->ue_id, emm_ctx, EMM_DEREGISTERED);
-      } else if (emm_ctx->specific_proc) {
-        rc = emm_proc_specific_abort (&emm_ctx->specific_proc);
+  case _EMMREG_COMMON_PROC_ABORT:
+    if (evt->u.common.common_proc) {
+      if (((nas_base_proc_t*)evt->u.common.common_proc)->parent) {
+        rc = nas_unlink_procedures(&((nas_base_proc_t*)evt->u.common.common_proc)->parent, &((nas_base_proc_t*)evt->u.common.common_proc));
       }
+
+      if (evt->u.common.common_proc->emm_proc.base_proc.abort) {
+        (*evt->u.common.common_proc->emm_proc.base_proc.abort)(emm_ctx);
+      }
+
+      rc = emm_fsm_set_state (evt->ue_id, emm_ctx, ((nas_emm_proc_t*)evt->u.common.common_proc)->previous_emm_fsm_state);
+
+      if ((rc != RETURNerror) && (emm_ctx) && (evt->notify) && (evt->u.common.common_proc->emm_proc.base_proc.failure_notif)) {
+        (*evt->u.common.common_proc->emm_proc.base_proc.failure_notif)(emm_ctx);
+      }
+      nas_free_procedure(emm_ctx, &((nas_base_proc_t*)evt->u.common.common_proc));
     }
+    break;
+
+  case EMMREG_ATTACH_ABORT:
+    AssertFatal(0, "TODO");
     break;
 
   case _EMMREG_COMMON_PROC_CNF:
@@ -124,15 +132,18 @@ EmmCommonProcedureInitiated (
     /*
      * An EMM common procedure successfully completed;
      */
-    if (evt->u.common.is_attached) {
-      rc = emm_fsm_set_state (evt->ue_id, emm_ctx, EMM_REGISTERED);
-    } else {
-      rc = emm_fsm_set_state (evt->ue_id, emm_ctx, EMM_DEREGISTERED);
-    }
-    OAILOG_TRACE (LOG_NAS_EMM, "rc=%d, emm_ctx=%p, common_proc=%p\n", rc, emm_ctx, emm_ctx->common_proc);
 
-    if ((rc != RETURNerror) && (emm_ctx) && (emm_ctx->common_proc)) {
-      rc = emm_proc_common_success (&emm_ctx->common_proc);
+    if (evt->u.common.common_proc) {
+      if (((nas_base_proc_t*)evt->u.common.common_proc)->parent) {
+        rc = nas_unlink_procedures(&((nas_base_proc_t*)evt->u.common.common_proc)->parent, &((nas_base_proc_t*)evt->u.common.common_proc));
+      }
+
+      rc = emm_fsm_set_state (evt->ue_id, emm_ctx, ((nas_emm_proc_t*)evt->u.common.common_proc)->previous_emm_fsm_state);
+
+      if ((rc != RETURNerror) && (emm_ctx) && (evt->notify)) {
+        (*evt->u.common.common_proc->emm_proc.base_proc.success_notif)(emm_ctx);
+      }
+      nas_free_procedure(emm_ctx, &((nas_base_proc_t*)evt->u.common.common_proc));
     }
 
     break;
@@ -144,8 +155,13 @@ EmmCommonProcedureInitiated (
      */
     rc = emm_fsm_set_state (evt->ue_id, emm_ctx, EMM_DEREGISTERED);
 
-    if ((rc != RETURNerror) && (emm_ctx) && (emm_ctx->common_proc)) {
-      rc = emm_proc_common_reject (&emm_ctx->common_proc);
+    if ((rc != RETURNerror) && (emm_ctx) && (evt->notify) && (evt->u.common.common_proc->emm_proc.base_proc.failure_notif)) {
+      rc = (*evt->u.common.common_proc->emm_proc.base_proc.failure_notif)(emm_ctx);
+    }
+
+    // TODO conditionally, check if parent proc delete childs !!!
+    if (evt->free_proc) {
+      nas_free_procedure(emm_ctx, &((nas_base_proc_t*)evt->u.common.common_proc));
     }
 
     break;
@@ -165,6 +181,7 @@ EmmCommonProcedureInitiated (
      * enter state EMM-DEREGISTERED.
      */
     rc = emm_fsm_set_state (evt->ue_id, emm_ctx, EMM_DEREGISTERED);
+    nas_free_procedure(emm_ctx, &(nas_base_proc_t*)evt->u.attach.attach_proc);
     break;
 
   case _EMMREG_LOWERLAYER_SUCCESS:
@@ -181,8 +198,8 @@ EmmCommonProcedureInitiated (
      * procedure being completed
      */
 
-    if ((emm_ctx) && (emm_ctx->common_proc)) {
-      rc = emm_proc_common_ll_failure (&emm_ctx->common_proc);
+    if ((rc != RETURNerror) && (emm_ctx) && (evt->notify) && (evt->u.ll_failure.emm_proc.base_proc.failure_notif)) {
+      (*evt->u.ll_failure.emm_proc.base_proc.failure_notif)(emm_ctx);
     }
 
     rc = emm_fsm_set_state (evt->ue_id, emm_ctx, EMM_DEREGISTERED);
@@ -190,8 +207,10 @@ EmmCommonProcedureInitiated (
     break;
 
   case _EMMREG_LOWERLAYER_NON_DELIVERY:
-    if ((emm_ctx) && (emm_ctx->common_proc)) {
-      rc = emm_proc_common_non_delivered_ho (&emm_ctx->common_proc);
+    if ((rc != RETURNerror) && (emm_ctx) && (evt->notify) && (evt->u.non_delivery_ho.emm_proc.base_proc.failure_notif)) {
+      rc = (*evt->u.non_delivery_ho.emm_proc.base_proc.failure_notif)(emm_ctx);
+    } else {
+      rc = RETURNok;
     }
     if (rc != RETURNerror) {
       rc = emm_fsm_set_state (evt->ue_id, emm_ctx, EMM_DEREGISTERED);

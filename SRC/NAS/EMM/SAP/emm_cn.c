@@ -110,83 +110,44 @@ static int _emm_cn_authentication_res (const emm_cn_auth_res_t * msg)
 
   if (ue_mm_context) {
     emm_ctx = &ue_mm_context->emm_context;
-  }
-  if (emm_ctx == NULL) {
-    OAILOG_ERROR (LOG_NAS_EMM, "EMM-PROC  - " "Failed to find UE associated to id " MME_UE_S1AP_ID_FMT "...\n", msg->ue_id);
-    OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
-  }
+    nas_auth_info_proc_t * auth_info_proc = get_nas_cn_procedure_auth_info(emm_ctx);
+    int                                     rc = RETURNerror;
 
-  /*
-   * Copy provided vector to user context
-   */
-  for (int i = 0; i < msg->nb_vectors; i++) {
-    memcpy (emm_ctx->_vector[i].kasme, msg->vector[i]->kasme, AUTH_KASME_SIZE);
-    memcpy (emm_ctx->_vector[i].autn,  msg->vector[i]->autn, AUTH_AUTN_SIZE);
-    memcpy (emm_ctx->_vector[i].rand, msg->vector[i]->rand, AUTH_RAND_SIZE);
-    memcpy (emm_ctx->_vector[i].xres, msg->vector[i]->xres.data, msg->vector[i]->xres.size);
-    emm_ctx->_vector[i].xres_size = msg->vector[i]->xres.size;
-    OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Received Vector %u:\n", i);
-    OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Received XRES ..: " XRES_FORMAT "\n", XRES_DISPLAY (emm_ctx->_vector[i].xres));
-    OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Received RAND ..: " RAND_FORMAT "\n", RAND_DISPLAY (emm_ctx->_vector[i].rand));
-    OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Received AUTN ..: " AUTN_FORMAT "\n", AUTN_DISPLAY (emm_ctx->_vector[i].autn));
-    OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Received KASME .: " KASME_FORMAT " " KASME_FORMAT "\n",
-        KASME_DISPLAY_1 (emm_ctx->_vector[i].kasme), KASME_DISPLAY_2 (emm_ctx->_vector[i].kasme));
-    emm_ctx_set_attribute_present(emm_ctx, EMM_CTXT_MEMBER_AUTH_VECTOR0+i);
-  }
-  emm_ctx_set_attribute_present(emm_ctx, EMM_CTXT_MEMBER_AUTH_VECTORS);
-
-  ksi_t eksi = 0;
-  if (emm_ctx->_security.eksi !=  KSI_NO_KEY_AVAILABLE) {
-    REQUIREMENT_3GPP_24_301(R10_5_4_2_4__2);
-    eksi = (emm_ctx->_security.eksi + 1) % (EKSI_MAX_VALUE + 1);
-  }
-  if (msg->nb_vectors > 0) {
-    int vindex = 0;
-    for (vindex = 0; vindex < MAX_EPS_AUTH_VECTORS; vindex++) {
-      if (IS_EMM_CTXT_PRESENT_AUTH_VECTOR(emm_ctx, vindex)) {
-        break;
-      }
+    if (auth_info_proc) {
+      memcpy(auth_info_proc->vector, msg->vector, msg->nb_vectors);
+      auth_info_proc->nb_vectors = msg->nb_vectors;
+      rc = (*auth_info_proc->success_notif)(emm_ctx);
+    } else {
+      OAILOG_ERROR (LOG_NAS_EMM, "EMM-PROC  - " "Failed to find Auth_info procedure associated to UE id " MME_UE_S1AP_ID_FMT "...\n", msg->ue_id);
     }
-    // eksi should always be 0
-    AssertFatal(IS_EMM_CTXT_PRESENT_AUTH_VECTOR(emm_ctx, vindex), "TODO No valid vector, should not happen");
-    emm_ctx_set_security_vector_index(emm_ctx, vindex);
-
-    /*
-     * 3GPP TS 24.401, Figure 5.3.2.1-1, point 5a
-     * * * * No EMM context exists for the UE in the network; authentication
-     * * * * and NAS security setup to activate integrity protection and NAS
-     * * * * ciphering are mandatory.
-     */
-    emm_common_reject_callback_t cb = NULL;
-
-    if (emm_ctx_is_specific_procedure_running(emm_ctx, EMM_CTXT_SPEC_PROC_ATTACH)) {
-      cb = _emm_attach_reject;
-    }
-    rc = emm_proc_authentication (emm_ctx, ue_mm_context->mme_ue_s1ap_id, eksi,
-        emm_ctx->_vector[vindex].rand, emm_ctx->_vector[vindex].autn, emm_attach_security, cb, NULL);
-
-    if (rc != RETURNok) {
-      /*
-       * Failed to initiate the authentication procedure
-       */
-      OAILOG_WARNING (LOG_NAS_EMM, "EMM-PROC  - " "Failed to initiate authentication procedure\n");
-      emm_ctx->emm_cause = EMM_CAUSE_ILLEGAL_UE;
-    }
-  } else {
-    OAILOG_WARNING (LOG_NAS_EMM, "EMM-PROC  - " "Failed to initiate authentication procedure\n");
-    emm_ctx->emm_cause = EMM_CAUSE_ILLEGAL_UE;
   }
-
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
 }
 
 //------------------------------------------------------------------------------
 static int _emm_cn_authentication_fail (const emm_cn_auth_fail_t * msg)
 {
+  OAILOG_FUNC_IN (LOG_NAS_EMM);
+  emm_context_t                          *emm_ctx = NULL;
   int                                     rc = RETURNerror;
 
-  OAILOG_FUNC_IN (LOG_NAS_EMM);
-  rc = emm_proc_attach_reject (msg->ue_id, msg->cause);
+  /*
+   * We received security vector from HSS. Try to setup security with UE
+   */
+  ue_mm_context_t *ue_mm_context = mme_ue_context_exists_mme_ue_s1ap_id (&mme_app_desc.mme_ue_contexts, msg->ue_id);
+
+  if (ue_mm_context) {
+    emm_ctx = &ue_mm_context->emm_context;
+    nas_auth_info_proc_t * auth_info_proc = get_nas_cn_procedure_auth_info(emm_ctx);
+    int                                     rc = RETURNerror;
+
+    if (auth_info_proc) {
+      auth_info_proc->nas_cause = msg->cause;
+      rc = (*auth_info_proc->failure_notif)(emm_ctx);
+    } else {
+      OAILOG_ERROR (LOG_NAS_EMM, "EMM-PROC  - " "Failed to find Auth_info procedure associated to UE id " MME_UE_S1AP_ID_FMT "...\n", msg->ue_id);
+    }
+  }
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
 }
 

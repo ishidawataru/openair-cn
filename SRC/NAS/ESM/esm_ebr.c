@@ -278,26 +278,25 @@ int esm_ebr_release (emm_context_t * emm_context, ebi_t ebi)
    */
   if (ebr_ctx->timer.id != NAS_TIMER_INACTIVE_ID) {
     OAILOG_INFO (LOG_NAS_ESM, "ESM-FSM   - Stop retransmission timer %ld\n", ebr_ctx->timer.id);
-    ebr_ctx->timer.id = nas_timer_stop (ebr_ctx->timer.id);
-    MSC_LOG_EVENT (MSC_NAS_ESM_MME, "0 Timer %x ebi %u stopped", ebr_ctx->timer.id, ebi);
-  }
-
-  /*
-   * Release the retransmisison timer parameters
-   */
-  if (ebr_ctx->args) {
-    if (ebr_ctx->args->msg) {
-      bdestroy_wrapper (&ebr_ctx->args->msg);
+    esm_ebr_timer_data_t * esm_ebr_timer_data = NULL;
+    ebr_ctx->timer.id = nas_timer_stop (ebr_ctx->timer.id, (void**)&esm_ebr_timer_data);
+    /*
+     * Release the retransmisison timer parameters
+     */
+    if (esm_ebr_timer_data) {
+      if (esm_ebr_timer_data->msg) {
+        bdestroy_wrapper (&esm_ebr_timer_data->msg);
+      }
+      free_wrapper ((void**)&esm_ebr_timer_data);
     }
-
-    free_wrapper ((void**)&ebr_ctx->args);
+    MSC_LOG_EVENT (MSC_NAS_ESM_MME, "0 Timer %x ebi %u stopped", ebr_ctx->timer.id, ebi);
   }
 
   /*
    * Release EPS bearer context data
    */
-  //free_wrapper ((void**)&ebr_ctx);
-  //ebr_ctx = NULL;
+  // struct attribute of another struct, no free
+
   OAILOG_INFO (LOG_NAS_ESM, "ESM-FSM   - EPS bearer context %d released\n", ebi);
   OAILOG_FUNC_RETURN (LOG_NAS_ESM, RETURNok);
 }
@@ -354,55 +353,55 @@ int esm_ebr_start_timer (emm_context_t * emm_context, ebi_t ebi,
 
   ebr_ctx = &bearer_context->esm_ebr_context;
 
+  esm_ebr_timer_data_t * esm_ebr_timer_data = NULL;
   if (ebr_ctx->timer.id != NAS_TIMER_INACTIVE_ID) {
-    if (ebr_ctx->args) {
-      /*
-       * Re-start the retransmission timer
-       */
-      ebr_ctx->timer.id = nas_timer_stop (ebr_ctx->timer.id);
-      ebr_ctx->timer.id = nas_timer_start (sec, 0 /* usec */, cb, ebr_ctx->args);
-      MSC_LOG_EVENT (MSC_NAS_ESM_MME, "0 Timer %x ebi %u restarted", ebr_ctx->timer.id, ebi);
-    }
+    /*
+     * Re-start the retransmission timer
+     */
+    ebr_ctx->timer.id = nas_timer_stop (ebr_ctx->timer.id, (void**)&esm_ebr_timer_data);
+    ebr_ctx->timer.id = nas_timer_start (sec, 0 /* usec */, cb, esm_ebr_timer_data);
+    MSC_LOG_EVENT (MSC_NAS_ESM_MME, "0 Timer %x ebi %u restarted", ebr_ctx->timer.id, ebi);
   } else {
     /*
      * Setup the retransmission timer parameters
      */
-    ebr_ctx->args = (esm_ebr_timer_data_t *) malloc (sizeof (esm_ebr_timer_data_t));
+    esm_ebr_timer_data = (esm_ebr_timer_data_t *) calloc (1, sizeof (esm_ebr_timer_data_t));
 
-    if (ebr_ctx->args) {
+    if (esm_ebr_timer_data) {
       /*
        * Set the UE identifier
        */
-      ebr_ctx->args->ue_id = ue_mm_context->mme_ue_s1ap_id;
-      ebr_ctx->args->ctx = emm_context;
+      esm_ebr_timer_data->ue_id = ue_mm_context->mme_ue_s1ap_id;
+      esm_ebr_timer_data->ctx = emm_context;
       /*
        * Set the EPS bearer identity
        */
-      ebr_ctx->args->ebi = ebi;
+      esm_ebr_timer_data->ebi = ebi;
       /*
        * Reset the retransmission counter
        */
-      ebr_ctx->args->count = 0;
+      esm_ebr_timer_data->count = 0;
       /*
        * Set the ESM message to be re-transmited
        */
-      ebr_ctx->args->msg = bstrcpy (msg);
+      esm_ebr_timer_data->msg = bstrcpy (msg);
 
       /*
        * Setup the retransmission timer to expire at the given
        * * * * time interval
        */
-      ebr_ctx->timer.id = nas_timer_start (sec, 0 /* usec */, cb, ebr_ctx->args);
+      ebr_ctx->timer.id = nas_timer_start (sec, 0 /* usec */, cb, esm_ebr_timer_data);
       MSC_LOG_EVENT (MSC_NAS_ESM_MME, "0 Timer %x ebi %u started", ebr_ctx->timer.id, ebi);
       ebr_ctx->timer.sec = sec;
     }
   }
 
-  if ((ebr_ctx->args ) && (ebr_ctx->timer.id != NAS_TIMER_INACTIVE_ID)) {
+  if ((esm_ebr_timer_data) && (ebr_ctx->timer.id != NAS_TIMER_INACTIVE_ID)) {
     OAILOG_INFO (LOG_NAS_ESM, "ESM-FSM   - Retransmission timer %ld expires in " "%ld seconds\n", ebr_ctx->timer.id, ebr_ctx->timer.sec);
     OAILOG_FUNC_RETURN (LOG_NAS_ESM, RETURNok);
   } else {
-    OAILOG_ERROR (LOG_NAS_ESM, "ESM-FSM   - ebr_ctx->args == NULL(%p) or ebr_ctx->timer.id == NAS_TIMER_INACTIVE_ID == -1 (%ld)\n", ebr_ctx->args, ebr_ctx->timer.id);
+    OAILOG_ERROR (LOG_NAS_ESM, "ESM-FSM   - esm_ebr_timer_data == NULL(%p) or ebr_ctx->timer.id == NAS_TIMER_INACTIVE_ID == -1 (%ld)\n",
+        esm_ebr_timer_data, ebr_ctx->timer.id);
   }
 
   OAILOG_FUNC_RETURN (LOG_NAS_ESM, RETURNerror);
@@ -454,19 +453,18 @@ int esm_ebr_stop_timer (emm_context_t * emm_context, ebi_t ebi)
    */
   if (ebr_ctx->timer.id != NAS_TIMER_INACTIVE_ID) {
     OAILOG_INFO (LOG_NAS_ESM, "ESM-FSM   - Stop retransmission timer %ld\n", ebr_ctx->timer.id);
-    ebr_ctx->timer.id = nas_timer_stop (ebr_ctx->timer.id);
+    esm_ebr_timer_data_t * esm_ebr_timer_data = NULL;
+    ebr_ctx->timer.id = nas_timer_stop (ebr_ctx->timer.id, (void**)&esm_ebr_timer_data);
     MSC_LOG_EVENT (MSC_NAS_ESM_MME, "0 Timer %x ebi %u stopped", ebr_ctx->timer.id, ebi);
-  }
-
-  /*
-   * Release the retransmisison timer parameters
-   */
-  if (ebr_ctx->args) {
-    if (ebr_ctx->args->msg) {
-      bdestroy_wrapper (&ebr_ctx->args->msg);
+    /*
+     * Release the retransmisison timer parameters
+     */
+    if (esm_ebr_timer_data) {
+      if (esm_ebr_timer_data->msg) {
+        bdestroy_wrapper (&esm_ebr_timer_data->msg);
+      }
+      free_wrapper ((void**)&esm_ebr_timer_data);
     }
-
-    free_wrapper ((void**)&ebr_ctx->args);
   }
 
   OAILOG_FUNC_RETURN (LOG_NAS_ESM, RETURNok);

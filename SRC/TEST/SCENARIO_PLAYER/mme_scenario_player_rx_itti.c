@@ -237,7 +237,7 @@ void mme_scenario_player_handle_nas_downlink_data_req (instance_t instance, cons
     if (NAS_DOWNLINK_DATA_REQ == ITTI_MSG_ID (item->u.msg.itti_msg)) {
       // OK messages seems to match
       if (item->u.msg.timer_id) {
-        timer_remove(item->u.msg.timer_id);
+        timer_remove(item->u.msg.timer_id, NULL);
       }
       msp_get_elapsed_time_since_scenario_start(scenario, &item->u.msg.time_stamp);
 
@@ -307,7 +307,7 @@ void mme_scenario_player_handle_mme_app_connection_establishment_cnf (instance_t
     if (MME_APP_CONNECTION_ESTABLISHMENT_CNF == ITTI_MSG_ID (item->u.msg.itti_msg)) {
       // OK messages seems to match
       if (item->u.msg.timer_id) {
-        timer_remove(item->u.msg.timer_id);
+        timer_remove(item->u.msg.timer_id, NULL);
       }
       msp_get_elapsed_time_since_scenario_start(scenario, &item->u.msg.time_stamp);
 
@@ -336,6 +336,21 @@ void mme_scenario_player_handle_mme_app_connection_establishment_cnf (instance_t
       item->is_played = true;
 
     } else {
+      bstring filename = NULL;
+      switch (ITTI_MSG_ID (item->u.msg.itti_msg)) {
+        case S1AP_UE_CONTEXT_RELEASE_COMMAND:
+          filename = mme_scenario_player_dump_s1ap_ue_context_release_command(received_message);
+          break;
+        case S1AP_E_RAB_SETUP_REQ:
+          filename = mme_scenario_player_dump_s1ap_e_rab_setup_req(received_message);
+          break;
+        case NAS_DOWNLINK_DATA_REQ:
+          filename = mme_scenario_player_dump_nas_downlink_data_req(received_message);
+          break;
+        default:
+          OAILOG_WARNING(LOG_MME_SCENARIO_PLAYER, "Could not dump unexpected message ITTI_MSG_ID %d\n", ITTI_MSG_ID (item->u.msg.itti_msg));
+      }
+      bdestroy_wrapper(&filename);
       scenario_set_status(scenario, SCENARIO_STATUS_PLAY_FAILED, SCENARIO_XML_COMPARISON_FAILED, "NOT A EXPECTED MME_APP_CONNECTION_ESTABLISHMENT_CNF MSG");
       OAILOG_ERROR(LOG_MME_SCENARIO_PLAYER, "Pending RX message in scenario %s is not MME_APP_CONNECTION_ESTABLISHMENT_CNF, scenario failed\n", scenario->name->data);
     }
@@ -426,7 +441,7 @@ void mme_scenario_player_handle_s1ap_ue_context_release_command (instance_t inst
     if (S1AP_UE_CONTEXT_RELEASE_COMMAND == ITTI_MSG_ID (item->u.msg.itti_msg)) {
       // OK messages seems to match
       if (item->u.msg.timer_id) {
-        timer_remove(item->u.msg.timer_id);
+        timer_remove(item->u.msg.timer_id, NULL);
       }
       msp_get_elapsed_time_since_scenario_start(scenario, &item->u.msg.time_stamp);
 
@@ -542,7 +557,7 @@ void mme_scenario_player_handle_s1ap_e_rab_setup_req (instance_t instance, const
     if (S1AP_E_RAB_SETUP_REQ == ITTI_MSG_ID (item->u.msg.itti_msg)) {
       // OK messages seems to match
       if (item->u.msg.timer_id) {
-        timer_remove(item->u.msg.timer_id);
+        timer_remove(item->u.msg.timer_id, NULL);
       }
       msp_get_elapsed_time_since_scenario_start(scenario, &item->u.msg.time_stamp);
 

@@ -236,10 +236,6 @@ void esm_ebr_context_init (esm_ebr_context_t *esm_ebr_context)
      * Disable the retransmission timer
      */
     esm_ebr_context->timer.id = NAS_TIMER_INACTIVE_ID;
-    /*
-     * Setup retransmission timer parameters
-     */
-    esm_ebr_context->args = NULL;
   }
 }
 

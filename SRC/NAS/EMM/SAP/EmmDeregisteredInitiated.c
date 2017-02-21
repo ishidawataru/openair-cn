@@ -113,6 +113,11 @@ EmmDeregisteredInitiated (
       rc = emm_fsm_set_state (evt->ue_id, evt->ctx, EMM_DEREGISTERED);
       break;
 
+    case EMMREG_ATTACH_ABORT:
+      AssertFatal(0, "TODO");
+      break;
+
+
   default:
     OAILOG_ERROR (LOG_NAS_EMM, "EMM-FSM   - Primitive is not valid (%d)\n", evt->primitive);
     break;

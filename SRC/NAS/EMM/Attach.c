@@ -31,7 +31,7 @@
 
   Subsystem   EPS Mobility Management
 
-  Author      Frederic Maurel
+  Author      Frederic Maurel, Lionel GAUTHIER
 
   Description Defines the attach related EMM procedure executed by the
         Non-Access Stratum.
@@ -111,52 +111,41 @@ static const char                      *_emm_attach_type_str[] = {
         Internal data handled by the attach procedure in the MME
    --------------------------------------------------------------------------
 */
+
 /*
    Timer handlers
 */
-static void                            *_emm_attach_t3450_handler (void *);
+static void _emm_attach_t3450_handler (void *);
 
 /*
    Functions that may initiate EMM common procedures
 */
-static int                              _emm_attach_identify (emm_context_t *emm_context);
-static int                              _emm_attach_security (emm_context_t *emm_context);
-static int                              _emm_attach (emm_context_t *emm_context);
+static int _emm_start_attach_proc_authentication (emm_context_t *emm_context, nas_emm_attach_proc_t* attach_proc);
+static int _emm_start_attach_proc_security (emm_context_t *emm_context, nas_emm_attach_proc_t* attach_proc);
+
+static int _emm_attach_security (emm_context_t *emm_context);
+static int _emm_attach (emm_context_t *emm_context);
+
+static int _emm_attach_success_identification_cb (emm_context_t *emm_context);
+static int _emm_attach_failure_identification_cb (emm_context_t *emm_context);
+static int _emm_attach_success_authentication_cb (emm_context_t *emm_context);
+static int _emm_attach_failure_authentication_cb (emm_context_t *emm_context);
+static int _emm_attach_success_security_cb (emm_context_t *emm_context);
+static int _emm_attach_failure_security_cb (emm_context_t *emm_context);
 
 /*
    Abnormal case attach procedures
 */
-static int                              _emm_attach_release (emm_context_t *emm_context);
-int                                     _emm_attach_reject (emm_context_t *emm_context);
-static int                              _emm_attach_abort (emm_context_t *emm_context);
+static int _emm_attach_release (emm_context_t *emm_context);
+static int _emm_attach_abort (struct emm_context_s* emm_context, struct nas_base_proc_s * base_proc);
+static int _emm_attach_run_procedure(emm_context_t *emm_context);
+static int _emm_send_attach_accept (emm_context_t * emm_context);
 
-static int                              _emm_attach_have_changed (
-  const emm_context_t * ctx,
-  emm_proc_attach_type_t type,
-  ksi_t ksi,
-  guti_t * guti,
-  imsi_t * imsi,
-  imei_t * imei,
-  const ue_network_capability_t * const ue_network_capability,
-  const ms_network_capability_t * const ms_network_capability);
+static bool _emm_attach_ies_have_changed (mme_ue_s1ap_id_t ue_id, emm_attach_request_ies_t * const ies1, emm_attach_request_ies_t * const ies2);
 
-static int                              _emm_attach_update (
-  emm_context_t * ctx,
-  mme_ue_s1ap_id_t ue_id,
-  emm_proc_attach_type_t type,
-  ksi_t ksi,
-  bool is_native_guti,
-  guti_t * guti,
-  imsi_t * imsi,
-  imei_t * imei,
-  const tai_t   * const originating_tai,
-  const ue_network_capability_t * const ue_network_capability,
-  const ms_network_capability_t * const ms_network_capability,
-  const_bstring esm_msg_pP);
+static void _emm_proc_create_procedure_attach_request(ue_mm_context_t * const ue_mm_context, emm_attach_request_ies_t * const ies);
 
-
-
-static int _emm_attach_accept (emm_context_t * emm_context);
+static int _emm_attach_update (emm_context_t * const emm_context, emm_attach_request_ies_t * const ies);
 
 /****************************************************************************/
 /******************  E X P O R T E D    F U N C T I O N S  ******************/
@@ -206,37 +195,22 @@ int
 emm_proc_attach_request (
   enb_s1ap_id_key_t  enb_ue_s1ap_id_key,
   mme_ue_s1ap_id_t ue_id,
-  const bool is_initial,
-  const emm_proc_attach_type_t type,
-  const bool is_native_ksi,
-  const ksi_t     ksi,
-  const bool is_native_guti,
-  guti_t * guti,
-  imsi_t * imsi,
-  imei_t * imei,
-  tai_t * last_visited_registered_tai,
-  const tai_t   * const originating_tai,
-  const ecgi_t   * const originating_ecgi,
-  const ue_network_capability_t * const ue_network_capability,
-  const ms_network_capability_t * const ms_network_capability,
-  const_bstring esm_msg_pP,
-  const nas_message_decode_status_t  * const decode_status)
+  emm_attach_request_ies_t * const ies)
 {
   OAILOG_FUNC_IN (LOG_NAS_EMM);
   int                                     rc = RETURNerror;
-  ue_mm_context_t                         ue_ctx;
-  emm_fsm_state_t                         fsm_state = EMM_DEREGISTERED;
-  bool                                    create_new_emm_ctxt = false;
+  //ue_mm_context_t                         ue_ctx;
+  nas_emm_attach_proc_t                   dummy_attach_proc = {0};
   bool                                    duplicate_enb_context_detected = false;
   ue_mm_context_t                         * ue_mm_context = NULL;
   imsi64_t                                imsi64  = INVALID_IMSI64;
 
-  if (imsi) {
-    imsi64 = imsi_to_imsi64(imsi);
+  if (ies->imsi) {
+    imsi64 = imsi_to_imsi64(ies->imsi);
   }
 
   OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  ATTACH - EPS attach type = %s (%d) initial %u requested (ue_id=" MME_UE_S1AP_ID_FMT ")\n",
-      _emm_attach_type_str[type], type, is_initial, ue_id);
+      _emm_attach_type_str[ies->type], ies->type, ies->is_initial, ue_id);
   /*
    * Initialize the temporary UE context
    */
@@ -248,8 +222,8 @@ emm_proc_attach_request (
   if (INVALID_MME_UE_S1AP_ID != ue_id) {
     ue_mm_context = mme_ue_context_exists_mme_ue_s1ap_id (&mme_app_desc.mme_ue_contexts, ue_id);
   } else {
-    if (guti) { // no need for  && (is_native_guti)
-      ue_mm_context = mme_ue_context_exists_guti (&mme_app_desc.mme_ue_contexts, guti);
+    if (ies->guti) { // no need for  && (is_native_guti)
+      ue_mm_context = mme_ue_context_exists_guti (&mme_app_desc.mme_ue_contexts, ies->guti);
       if (ue_mm_context) {
         ue_id = ue_mm_context->mme_ue_s1ap_id;
         if (ue_mm_context->enb_s1ap_id_key != enb_ue_s1ap_id_key) {
@@ -260,7 +234,7 @@ emm_proc_attach_request (
         }
       }
     }
-    if ((!ue_mm_context) && (imsi)) {
+    if ((!ue_mm_context) && (ies->imsi)) {
       ue_mm_context = mme_ue_context_exists_imsi (&mme_app_desc.mme_ue_contexts, imsi64);
       if (ue_mm_context) {
         ue_id = ue_mm_context->mme_ue_s1ap_id;
@@ -278,13 +252,13 @@ emm_proc_attach_request (
       if (ue_mm_context) {
         OAILOG_WARNING (LOG_NAS_EMM, "EMM-PROC  - Found old ue_mm_context matching enb_ue_s1ap_id in ATTACH_REQUEST...very suspicious\n");
         ue_id = emm_ctx_get_new_ue_id(&ue_mm_context->emm_context);
-        mme_api_notified_new_ue_s1ap_id_association (ue_mm_context->enb_ue_s1ap_id, originating_ecgi->cell_identity.enb_id, ue_id);
+        mme_api_notified_new_ue_s1ap_id_association (ue_mm_context->enb_ue_s1ap_id, ies->originating_ecgi->cell_identity.enb_id, ue_id);
       }
     }
   }
 
   if (duplicate_enb_context_detected) {
-    if (is_initial) {
+    if (ies->is_initial) {
       // remove new context
       ue_mm_context = mme_api_duplicate_enb_ue_s1ap_id_detected (enb_ue_s1ap_id_key,ue_mm_context->mme_ue_s1ap_id, REMOVE_NEW_CONTEXT);
       duplicate_enb_context_detected = false; // Problem solved
@@ -294,274 +268,233 @@ emm_proc_attach_request (
     }
   }
 
-  memset (&ue_ctx, 0, sizeof (ue_mm_context_t));
-  ue_ctx.emm_context.is_dynamic = false;
-  ue_ctx.mme_ue_s1ap_id = ue_id;
-
-
-  /*
-   * Requirement MME24.301R10_5.5.1.1_1
-   * MME not configured to support attach for emergency bearer services
-   * shall reject any request to attach with an attach type set to "EPS
-   * emergency attach".
-   */
-  if (!(_emm_data.conf.eps_network_feature_support & EPS_NETWORK_FEATURE_SUPPORT_EMERGENCY_BEARER_SERVICES_IN_S1_MODE_SUPPORTED) &&
-      (type == EMM_ATTACH_TYPE_EMERGENCY)) {
-    REQUIREMENT_3GPP_24_301(R10_5_5_1__1);
-    ue_ctx.emm_context.emm_cause = EMM_CAUSE_IMEI_NOT_ACCEPTED;
-    /*
-     * Do not accept the UE to attach for emergency services
-     */
-    rc = _emm_attach_reject (&ue_ctx.emm_context);
-    OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
-  }
-
-  fsm_state = emm_fsm_get_state (&ue_mm_context->emm_context);
-
   if (ue_mm_context) {
-    if (emm_ctx_is_common_procedure_running(&ue_mm_context->emm_context, EMM_CTXT_COMMON_PROC_SMC)) {
-      REQUIREMENT_3GPP_24_301(R10_5_4_3_7_c);
-      emm_sap_t                               emm_sap = {0};
-      emm_sap.primitive = EMMREG_PROC_ABORT;
-      emm_sap.u.emm_reg.ue_id = ue_mm_context->mme_ue_s1ap_id;
-      emm_sap.u.emm_reg.ctx   = &ue_mm_context->emm_context;
-      // TODOdata->notify_failure = true;
-      MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "0 EMMREG_PROC_ABORT (SMC) ue id " MME_UE_S1AP_ID_FMT " ", ue_mm_context->mme_ue_s1ap_id);
-      rc = emm_sap_send (&emm_sap);
-    }
-    if (emm_ctx_is_common_procedure_running(&ue_mm_context->emm_context, EMM_CTXT_COMMON_PROC_IDENT)) {
+    // Put that in procedure
+    //if ((ies->is_initial) && (ies->imsi)) {
+    //  ue_mm_context->emm_context.is_initial_identity_imsi = true;
+    //} else {
+    //  ue_mm_context->emm_context.is_initial_identity_imsi = false;
+    //}
 
-      if (emm_ctx_is_specific_procedure_running (&ue_mm_context->emm_context, EMM_CTXT_SPEC_PROC_ATTACH)) {
-        if (emm_ctx_is_specific_procedure_running (&ue_mm_context->emm_context, EMM_CTXT_SPEC_PROC_ATTACH_ACCEPT_SENT | EMM_CTXT_SPEC_PROC_ATTACH_REJECT_SENT)) {
-          REQUIREMENT_3GPP_24_301(R10_5_4_4_6_c); // continue
-        } else {
-          if (_emm_attach_have_changed(&ue_mm_context->emm_context, type, ksi, guti, imsi, imei,
-              ue_network_capability, ms_network_capability)) {
-            REQUIREMENT_3GPP_24_301(R10_5_4_4_6_d__1);
-            emm_sap_t                               emm_sap = {0};
-            emm_sap.primitive = EMMREG_PROC_ABORT;
-            emm_sap.u.emm_reg.ue_id = ue_mm_context->mme_ue_s1ap_id;
-            emm_sap.u.emm_reg.ctx   = &ue_mm_context->emm_context;
-            // TODOdata->notify_failure = true;
-            rc = emm_sap_send (&emm_sap);
-
-            emm_context_silently_reset_procedures(&ue_mm_context->emm_context);
-          } else {
-            REQUIREMENT_3GPP_24_301(R10_5_4_4_6_d__2);
-            // No need to report an error
-            OAILOG_FUNC_RETURN (LOG_NAS_EMM, RETURNok);
-          }
-        }
-      } else {
-        REQUIREMENT_3GPP_24_301(R10_5_4_4_6_c); // continue
-      }
-    }
-  }
-
-  if ((ue_mm_context) && (EMM_REGISTERED == fsm_state)) {
-    REQUIREMENT_3GPP_24_301(R10_5_5_1_2_7_f);
-    if (ue_mm_context->emm_context.is_has_been_attached) {
-      OAILOG_TRACE (LOG_NAS_EMM, "EMM-PROC  - the new ATTACH REQUEST is progressed\n");
-      emm_context_silently_reset_procedures(&ue_mm_context->emm_context); // TEST
-      emm_fsm_set_state(ue_id, &ue_mm_context->emm_context, EMM_DEREGISTERED);
-      // "TODO think about emm_context_remove"
-      //ue_mm_context = emm_context_remove (&_emm_data, ue_mm_context);
-      if (duplicate_enb_context_detected) {
-        OAILOG_TRACE (LOG_NAS_EMM, "EMM-PROC  - Warning for developper: this has been thought as a case that cannot happen\n");
-        ue_mm_context = mme_api_duplicate_enb_ue_s1ap_id_detected (enb_ue_s1ap_id_key,ue_mm_context->mme_ue_s1ap_id, REMOVE_OLD_CONTEXT);
-      }
-      emm_init_context(&ue_mm_context->emm_context, false);
-    }
-  } else if ((ue_mm_context) && emm_ctx_is_specific_procedure_running (&ue_mm_context->emm_context, EMM_CTXT_SPEC_PROC_ATTACH | EMM_CTXT_SPEC_PROC_ATTACH_ACCEPT_SENT)) {// && (!ue_mm_context->is_attach_complete_received): implicit
-    ue_mm_context->emm_context.num_attach_request++;
-    if (_emm_attach_have_changed(&ue_mm_context->emm_context, type, ksi, guti, imsi, imei, ue_network_capability, ms_network_capability)) {
-      OAILOG_WARNING (LOG_NAS_EMM, "EMM-PROC  - Attach parameters have changed\n");
-      REQUIREMENT_3GPP_24_301(R10_5_5_1_2_7_d__1);
+    /*
+     * Requirement MME24.301R10_5.5.1.1_1
+     * MME not configured to support attach for emergency bearer services
+     * shall reject any request to attach with an attach type set to "EPS
+     * emergency attach".
+     */
+    if (!(_emm_data.conf.eps_network_feature_support & EPS_NETWORK_FEATURE_SUPPORT_EMERGENCY_BEARER_SERVICES_IN_S1_MODE_SUPPORTED) &&
+        (ies->type == EMM_ATTACH_TYPE_EMERGENCY)) {
+      REQUIREMENT_3GPP_24_301(R10_5_5_1__1);
       /*
-       * If one or more of the information elements in the ATTACH REQUEST message differ from the ones
-       * received within the previous ATTACH REQUEST message, the previously initiated attach procedure shall
-       * be aborted if the ATTACH COMPLETE message has not been received and the new attach procedure shall
-       * be progressed;
+       * Do not accept the UE to attach for emergency services
        */
+      dummy_attach_proc.emm_cause = EMM_CAUSE_IMEI_NOT_ACCEPTED;
+      dummy_attach_proc.emm_spec_proc.emm_proc.base_proc.fail_out = _emm_attach_reject;
+      dummy_attach_proc.emm_spec_proc.type = EMM_SPEC_PROC_TYPE_ATTACH;
+      dummy_attach_proc.emm_spec_proc.emm_proc.type = NAS_EMM_PROC_TYPE_SPECIFIC;
+      dummy_attach_proc.emm_spec_proc.emm_proc.base_proc.type = NAS_PROC_TYPE_EMM;
       emm_sap_t                               emm_sap = {0};
-
-      emm_sap.primitive = EMMREG_PROC_ABORT;
-      emm_sap.u.emm_reg.ue_id = ue_mm_context->mme_ue_s1ap_id;
-      emm_sap.u.emm_reg.ctx = &ue_mm_context->emm_context;
-      rc = emm_sap_send (&emm_sap);
-
-      if (RETURNerror == rc) {
-        emm_ctx_unmark_specific_procedure_running(&ue_mm_context->emm_context, EMM_CTXT_SPEC_PROC_ATTACH_REJECT_SENT);
-        OAILOG_WARNING (LOG_NAS_EMM, "EMM-PROC  - sent of ATTACH REJECT failed\n");
-      } else {
-        emm_ctx_mark_specific_procedure_running (&ue_mm_context->emm_context, EMM_CTXT_SPEC_PROC_ATTACH_REJECT_SENT);
-      }
-      if (duplicate_enb_context_detected) {
-        ue_mm_context = mme_api_duplicate_enb_ue_s1ap_id_detected (enb_ue_s1ap_id_key,ue_mm_context->mme_ue_s1ap_id, REMOVE_OLD_CONTEXT);
-      }
-    } else {
-      REQUIREMENT_3GPP_24_301(R10_5_5_1_2_7_d__2);
-      /*
-       * - if the information elements do not differ, then the ATTACH ACCEPT message shall be resent and the timer
-       * T3450 shall be restarted if an ATTACH COMPLETE message is expected. In that case, the retransmission
-       * counter related to T3450 is not incremented.
-       */
-      _emm_attach_accept(&ue_mm_context->emm_context);
-      OAILOG_FUNC_RETURN (LOG_NAS_EMM, RETURNok);
-    }
-
-  } else if ((ue_mm_context) && (0 < ue_mm_context->emm_context.num_attach_request) &&
-             (emm_ctx_is_specific_procedure_running (&ue_mm_context->emm_context, EMM_CTXT_SPEC_PROC_ATTACH)) &&
-             (!emm_ctx_is_specific_procedure_running (&ue_mm_context->emm_context, EMM_CTXT_SPEC_PROC_ATTACH_ACCEPT_SENT)) &&
-             (!emm_ctx_is_specific_procedure_running (&ue_mm_context->emm_context, EMM_CTXT_SPEC_PROC_ATTACH_REJECT_SENT))) {
-
-    ue_mm_context->emm_context.num_attach_request++;
-
-    if (_emm_attach_have_changed(&ue_mm_context->emm_context, type, ksi, guti, imsi, imei, ue_network_capability, ms_network_capability)) {
-      OAILOG_WARNING (LOG_NAS_EMM, "EMM-PROC  - Attach parameters have changed\n");
-      REQUIREMENT_3GPP_24_301(R10_5_5_1_2_7_e__1);
-      /*
-       * If one or more of the information elements in the ATTACH REQUEST message differs from the ones
-       * received within the previous ATTACH REQUEST message, the previously initiated attach procedure shall
-       * be aborted and the new attach procedure shall be executed;
-       */
-      emm_sap_t                               emm_sap = {0};
-
-      emm_sap.primitive = EMMREG_PROC_ABORT;
+      emm_sap.primitive = EMMREG_ATTACH_REJ;
       emm_sap.u.emm_reg.ue_id = ue_id;
       emm_sap.u.emm_reg.ctx = &ue_mm_context->emm_context;
+      emm_sap.u.emm_reg.notify = false;
+      emm_sap.u.emm_reg.free_proc = false;
+      emm_sap.u.emm_reg.u.attach.attach_proc = &dummy_attach_proc;
+      emm_sap.u.emm_reg.u.attach.is_emergency = true;
       rc = emm_sap_send (&emm_sap);
 
+      OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
+    }
 
-      if (RETURNerror == rc) {
-        emm_ctx_unmark_specific_procedure_running(&ue_mm_context->emm_context, EMM_CTXT_SPEC_PROC_ATTACH_REJECT_SENT);
-        OAILOG_WARNING (LOG_NAS_EMM, "EMM-PROC  - sent of ATTACH REJECT failed\n");
-        OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
+    if (is_nas_common_procedure_guti_realloc_running (&ue_mm_context->emm_context)) {
+      REQUIREMENT_3GPP_24_301(R10_5_4_1_6_c);
+      // TODO Delete (clear) EMM context
+    }
+
+    if (is_nas_common_procedure_smc_running (&ue_mm_context->emm_context)) {
+      REQUIREMENT_3GPP_24_301(R10_5_4_3_7_c);
+      nas_emm_smc_proc_t * smc_proc = get_nas_common_procedure_smc(&ue_mm_context->emm_context);
+      emm_sap_t                               emm_sap = {0};
+      emm_sap.primitive = EMMREG_COMMON_PROC_ABORT;
+      emm_sap.u.emm_reg.ue_id     = ue_id;
+      emm_sap.u.emm_reg.ctx       = &ue_mm_context->emm_context;
+      emm_sap.u.emm_reg.notify    = false;
+      emm_sap.u.emm_reg.free_proc = true;
+      emm_sap.u.emm_reg.u.common.common_proc = &smc_proc->emm_com_proc;
+      emm_sap.u.emm_reg.u.common.previous_emm_fsm_state = smc_proc->emm_com_proc.emm_proc.previous_emm_fsm_state;
+      emm_sap_send (&emm_sap);
+    }
+
+    if (is_nas_common_procedure_identification_running (&ue_mm_context->emm_context)) {
+      nas_emm_ident_proc_t  *ident_proc = get_nas_common_procedure_identification (&ue_mm_context->emm_context);
+      nas_emm_attach_proc_t *attach_proc = NULL;
+      if (!(attach_proc = get_nas_specific_procedure_attach (&ue_mm_context->emm_context))) {
+        REQUIREMENT_3GPP_24_301(R10_5_4_4_6_c); // continue
+        _emm_proc_create_procedure_attach_request(ue_mm_context, ies);
       } else {
-        emm_ctx_mark_specific_procedure_running (&ue_mm_context->emm_context, EMM_CTXT_SPEC_PROC_ATTACH_REJECT_SENT);
+        if ((is_nas_attach_accept_sent(attach_proc)) || (is_nas_attach_reject_sent(attach_proc))) {
+          REQUIREMENT_3GPP_24_301(R10_5_4_4_6_c); // continue
+        } else {
+          if (ident_proc->is_cause_is_attach) {
+            REQUIREMENT_3GPP_24_301(R10_5_4_4_6_d);
+            if (!(attach_proc->attach_accept_sent) && !(attach_proc->attach_reject_sent)) {
+              if (_emm_attach_ies_have_changed(ue_mm_context->mme_ue_s1ap_id, ies, attach_proc->ies)) {
+                REQUIREMENT_3GPP_24_301(R10_5_4_4_6_d__1);
+                emm_sap_t                               emm_sap = {0};
+                emm_sap.primitive = EMMREG_ATTACH_ABORT;
+                emm_sap.u.emm_reg.ue_id = attach_proc->ue_id;
+                emm_sap.u.emm_reg.ctx   = &ue_mm_context->emm_context;
+                emm_sap.u.emm_reg.notify= true;
+                emm_sap.u.emm_reg.free_proc = true;
+                emm_sap.u.emm_reg.u.attach.attach_proc   = attach_proc;
+                rc = emm_sap_send (&emm_sap);
+                _emm_proc_create_procedure_attach_request(ue_mm_context, ies);
+              } else {
+                REQUIREMENT_3GPP_24_301(R10_5_4_4_6_d__2);
+                // Do not treat further this new ATTACH REQUEST
+                OAILOG_FUNC_RETURN (LOG_NAS_EMM, RETURNok);
+              }
+            }
+          }
+        }
       }
-      if (duplicate_enb_context_detected) {
-        ue_mm_context = mme_api_duplicate_enb_ue_s1ap_id_detected (enb_ue_s1ap_id_key,ue_mm_context->mme_ue_s1ap_id, REMOVE_NEW_CONTEXT);
-      }
-    } else {
-      REQUIREMENT_3GPP_24_301(R10_5_5_1_2_7_e__2);
-      /*
-       * if the information elements do not differ, then the network shall continue with the previous attach procedure
-       * and shall ignore the second ATTACH REQUEST message.
-       */
-      //is_attach_procedure_progressed = false; // for clarity
-      OAILOG_WARNING (LOG_NAS_EMM, "EMM-PROC  - Received duplicated Attach Request\n");
-      OAILOG_FUNC_RETURN (LOG_NAS_EMM, RETURNok);
     }
+
+    if (is_nas_specific_procedure_attach_running (&ue_mm_context->emm_context)) {
+      nas_emm_attach_proc_t *attach_proc = (nas_emm_attach_proc_t*)ue_mm_context->emm_context.emm_procedures->emm_specific_proc;
+
+      if (is_nas_attach_accept_sent(attach_proc) && !(is_nas_attach_complete_received(attach_proc))) {
+        ue_mm_context->emm_context.num_attach_request++;
+        //-----------------------------------------------
+        // Abnormal case d
+        //-----------------------------------------------
+        if (_emm_attach_ies_have_changed(ue_mm_context->mme_ue_s1ap_id, ies, attach_proc->ies)) {
+          REQUIREMENT_3GPP_24_301(R10_5_5_1_2_7_d__1);
+          /*
+           * If one or more of the information elements in the ATTACH REQUEST message differ from the ones
+           * received within the previous ATTACH REQUEST message, the previously initiated attach procedure shall
+           * be aborted if the ATTACH COMPLETE message has not been received and the new attach procedure shall
+           * be progressed;
+           */
+          emm_sap_t                               emm_sap = {0};
+          emm_sap.primitive = EMMREG_ATTACH_ABORT;
+          emm_sap.u.emm_reg.ue_id = attach_proc->ue_id;
+          emm_sap.u.emm_reg.ctx   = &ue_mm_context->emm_context;
+          emm_sap.u.emm_reg.notify= true;
+          emm_sap.u.emm_reg.free_proc = true;
+          emm_sap.u.emm_reg.u.attach.attach_proc   = attach_proc;
+          rc = emm_sap_send (&emm_sap);
+
+          if (duplicate_enb_context_detected) {
+            ue_mm_context = mme_api_duplicate_enb_ue_s1ap_id_detected (enb_ue_s1ap_id_key,ue_mm_context->mme_ue_s1ap_id, REMOVE_OLD_CONTEXT);
+            duplicate_enb_context_detected = false;
+          }
+          _emm_proc_create_procedure_attach_request(ue_mm_context, ies);
+        } else {
+          REQUIREMENT_3GPP_24_301(R10_5_5_1_2_7_d__2);
+          /*
+           * if the information elements do not differ, then the ATTACH ACCEPT message shall be resent and the timer
+           * T3450 shall be restarted if an ATTACH COMPLETE message is expected. In that case, the retransmission
+           * counter related to T3450 is not incremented.
+           */
+          void *timer_callback_args = NULL;
+          // Problem here is that Timer TO is asynchronous....
+          // We should be able to purge the queue of events of TO...or have another design
+          nas_stop_T3450(ue_id, &attach_proc->T3450, timer_callback_args);
+          // resend
+          _emm_send_attach_accept(&ue_mm_context->emm_context);
+          if (!(is_nas_attach_complete_received(attach_proc))) {
+            REQUIREMENT_3GPP_24_301(R10_5_5_1_2_7_d__2_a);
+            nas_start_T3450(ue_id, &attach_proc->T3450, attach_proc->emm_spec_proc.emm_proc.base_proc.time_out, &ue_mm_context->emm_context);
+          }
+        }
+      } else if (!is_nas_attach_accept_sent(attach_proc) && (1 <= ue_mm_context->emm_context.num_attach_request)) {
+        //-----------------------------------------------
+        // Abnormal case e
+        //-----------------------------------------------
+        if (_emm_attach_ies_have_changed(ue_mm_context->mme_ue_s1ap_id, ies, attach_proc->ies)) {
+          REQUIREMENT_3GPP_24_301(R10_5_5_1_2_7_e__1);
+          /*
+           * More than one ATTACH REQUEST received and no ATTACH ACCEPT or ATTACH REJECT message has
+           * been sent
+           * - If one or more of the information elements in the ATTACH REQUEST message differs from the ones
+           * received within the previous ATTACH REQUEST message, the previously initiated attach procedure shall
+           * be aborted and the new attach procedure shall be executed;;
+           */
+          emm_sap_t           emm_sap = {0};
+          emm_sap.primitive           = EMMREG_ATTACH_ABORT;
+          emm_sap.u.emm_reg.ue_id     = attach_proc->ue_id;
+          emm_sap.u.emm_reg.ctx       = &ue_mm_context->emm_context;
+          emm_sap.u.emm_reg.notify    = false;
+          emm_sap.u.emm_reg.free_proc = true;
+          emm_sap.u.emm_reg.u.attach.attach_proc = attach_proc;
+          rc = emm_sap_send (&emm_sap);
+
+          if (duplicate_enb_context_detected) {
+            ue_mm_context = mme_api_duplicate_enb_ue_s1ap_id_detected (enb_ue_s1ap_id_key,ue_mm_context->mme_ue_s1ap_id, REMOVE_NEW_CONTEXT);
+            duplicate_enb_context_detected = false;
+          }
+          _emm_proc_create_procedure_attach_request(ue_mm_context, ies);
+        } else {
+          REQUIREMENT_3GPP_24_301(R10_5_5_1_2_7_e__2);
+          /*
+           * - if the information elements do not differ, then the network shall continue with the previous attach procedure
+           * and shall ignore the second ATTACH REQUEST message..
+           */
+          OAILOG_FUNC_RETURN (LOG_NAS_EMM, RETURNok);
+        }
+      }
+    }
+
+    //-----------------------------------------------
+    // Abnormal case f
+    //-----------------------------------------------
+    // Frankly I do not understand all what is stated in this section :
+    // "The UE has already been attached" : where ? This MME (with other s1ap identifiers?)?, another MME ?
+    if (EMM_REGISTERED == emm_fsm_get_state (&ue_mm_context->emm_context)) {
+      REQUIREMENT_3GPP_24_301(R10_5_5_1_2_7_f);
+      //_emm_proc_create_procedure_attach_request_case_f(ue_mm_context, ies);
+      _emm_proc_create_procedure_attach_request(ue_mm_context, ies);
+    }
+
+    ue_mm_context->emm_context.num_attach_request++;
+    if (duplicate_enb_context_detected) {
+      ue_mm_context = mme_api_duplicate_enb_ue_s1ap_id_detected (enb_ue_s1ap_id_key,ue_mm_context->mme_ue_s1ap_id,REMOVE_OLD_CONTEXT);
+      duplicate_enb_context_detected = false;
+    }
+
   } else { //else  ((ue_mm_context) && ((EMM_DEREGISTERED < fsm_state ) && (EMM_REGISTERED != fsm_state)))
-    if (!ue_mm_context) {
-      create_new_emm_ctxt = true;
-    } else {
-      ue_mm_context->emm_context.num_attach_request++;
-      if (duplicate_enb_context_detected) {
-        ue_mm_context = mme_api_duplicate_enb_ue_s1ap_id_detected (enb_ue_s1ap_id_key,ue_mm_context->mme_ue_s1ap_id,REMOVE_OLD_CONTEXT);
-      }
-    }
+    AssertFatal(0, "Should not go create a new context here");
   }
 
-  if (create_new_emm_ctxt) {
-    AssertFatal(0, "Should not go here now");
-//    /*
-//     * Create UE's EMM context
-//     */
-//    ue_mm_context = (ue_mm_context_t *) calloc (1, sizeof (ue_mm_context_t));
-//
-//    if (!ue_mm_context) {
-//      OAILOG_WARNING (LOG_NAS_EMM, "EMM-PROC  - Failed to create EMM context\n");
-//      ue_ctx.emm_context.emm_cause = EMM_CAUSE_ILLEGAL_UE;
-//      /*
-//       * Do not accept the UE to attach to the network
-//       */
-//      rc = _emm_attach_reject (&ue_ctx);
-//      OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
-//    }
-//    ue_mm_context->mme_ue_s1ap_id = emm_ctx_get_new_ue_id(&ue_mm_context->emm_context);
-//    ue_id = ue_mm_context->mme_ue_s1ap_id;
-//    OAILOG_NOTICE (LOG_NAS_EMM, "EMM-PROC  - Create EMM context ue_id = " MME_UE_S1AP_ID_FMT "\n", ue_id);
-//    emm_context->is_dynamic = true;
-//    bdestroy_wrapper (&emm_context->esm_msg);
-//    emm_context->emm_cause       = EMM_CAUSE_SUCCESS;
-//    emm_context->_emm_fsm_status = EMM_INVALID;
-//    emm_context->T3450.id        = NAS_TIMER_INACTIVE_ID;
-//    emm_context->T3450.sec       = mme_config.nas_config.t3450_sec;
-//    emm_context->T3460.id        = NAS_TIMER_INACTIVE_ID;
-//    emm_context->T3460.sec       = mme_config.nas_config.t3460_sec;
-//    emm_context->T3470.id        = NAS_TIMER_INACTIVE_ID;
-//    emm_context->T3470.sec       = mme_config.nas_config.t3470_sec;
-//    emm_fsm_set_status (ue_id, &ue_mm_context->emm_context, EMM_DEREGISTERED);
-//
-//    emm_ctx_clear_guti(&ue_mm_context->emm_context);
-//    emm_ctx_clear_old_guti(&ue_mm_context->emm_context);
-//    emm_ctx_clear_imsi(&ue_mm_context->emm_context);
-//    emm_ctx_clear_imei(&ue_mm_context->emm_context);
-//    emm_ctx_clear_imeisv(&ue_mm_context->emm_context);
+  AssertFatal(is_nas_specific_procedure_attach_running(&ue_mm_context->emm_context), "Should have a Attach procedure");
+
+  rc = _emm_attach_run_procedure (&ue_mm_context->emm_context);
+//  if (ies->last_visited_registered_tai) {
+//    emm_ctx_set_valid_lvr_tai(&ue_mm_context->emm_context, ies->last_visited_registered_tai);
+//  } else {
 //    emm_ctx_clear_lvr_tai(&ue_mm_context->emm_context);
-//    emm_ctx_clear_security(&ue_mm_context->emm_context);
-//    emm_ctx_clear_non_current_security(&ue_mm_context->emm_context);
-//    emm_ctx_clear_auth_vectors(&ue_mm_context->emm_context);
-//    emm_ctx_clear_ms_nw_cap(&ue_mm_context->emm_context);
-//    emm_ctx_clear_ue_nw_cap_ie(&ue_mm_context->emm_context);
-//    emm_ctx_clear_current_drx_parameter(&ue_mm_context->emm_context);
-//    emm_ctx_clear_pending_current_drx_parameter(&ue_mm_context->emm_context);
-//    emm_ctx_clear_eps_bearer_context_status(&ue_mm_context->emm_context);
+//  }
 //
-//    mme_api_notified_new_ue_s1ap_id_association (ue_mm_context->enb_ue_s1ap_id, originating_ecgi->cell_identity.enb_id, ue_mm_context->mme_ue_s1ap_id);
-  }
-
-#warning "Quick workaround for MWCDEMO2017 define DEMOMWC2017"
-#define DEMOMWC2017 1
-#if defined(DEMOMWC2017)
-    emm_ctx_clear_attribute_valid(&ue_mm_context->emm_context, EMM_CTXT_MEMBER_AUTH_VECTORS);
-#endif
-
-  if (!ue_mm_context->emm_context.specific_proc) {
-    ue_mm_context->emm_context.specific_proc = (emm_specific_procedure_data_t *) calloc (1, sizeof (*ue_mm_context->emm_context.specific_proc));
-
-    if (ue_mm_context->emm_context.specific_proc ) {
-      /*
-       * Setup ongoing EMM procedure callback functions
-       */
-      rc = emm_proc_specific_initialize (&ue_mm_context->emm_context, EMM_SPECIFIC_PROC_TYPE_ATTACH, ue_mm_context->emm_context.specific_proc, NULL, NULL, _emm_attach_abort);
-      emm_ctx_mark_specific_procedure_running (&ue_mm_context->emm_context, EMM_CTXT_SPEC_PROC_ATTACH);
-      ue_mm_context->emm_context.specific_proc->arg.u.attach_data.ue_id = ue_id;
-
-      if (rc != RETURNok) {
-        OAILOG_WARNING (LOG_NAS_EMM, "Failed to initialize EMM callback functions");
-        OAILOG_FUNC_RETURN (LOG_NAS_EMM, RETURNerror);
-      }
-    }
-  }
-
-  if (last_visited_registered_tai) {
-    emm_ctx_set_valid_lvr_tai(&ue_mm_context->emm_context, last_visited_registered_tai);
-  } else {
-    emm_ctx_clear_lvr_tai(&ue_mm_context->emm_context);
-  }
-
-  /*
-   * Update the EMM context with the current attach procedure parameters
-   */
-  rc = _emm_attach_update (&ue_mm_context->emm_context, ue_id, type, ksi, is_native_guti, guti, imsi, imei, originating_tai,
-      ue_network_capability, ms_network_capability, esm_msg_pP);
-
-  if (rc != RETURNok) {
-    OAILOG_WARNING (LOG_NAS_EMM, "EMM-PROC  - Failed to update EMM context\n");
-    /*
-     * Do not accept the UE to attach to the network
-     */
-    ue_mm_context->emm_context.emm_cause = EMM_CAUSE_ILLEGAL_UE;
-    rc = _emm_attach_reject (&ue_mm_context->emm_context);
-  } else {
-    /*
-     * Performs the sequence: UE identification, authentication, security mode
-     */
-    rc = _emm_attach_identify (&ue_mm_context->emm_context);
-  }
+//  /*
+//   * Update the EMM context with the current attach procedure parameters
+//   */
+//  rc = _emm_attach_update (&ue_mm_context->emm_context, ue_id, type, ksi, is_native_guti, guti, imsi, imei, originating_tai,
+//      ue_network_capability, ms_network_capability, esm_msg_pP);
+//
+//  if (rc != RETURNok) {
+//    OAILOG_WARNING (LOG_NAS_EMM, "EMM-PROC  - Failed to update EMM context\n");
+//    /*
+//     * Do not accept the UE to attach to the network
+//     */
+//    ue_mm_context->emm_context.emm_cause = EMM_CAUSE_ILLEGAL_UE;
+//    rc = _emm_attach_reject (&ue_mm_context->emm_context);
+//  } else {
+//    /*
+//     * Performs the sequence: UE identification, authentication, security mode
+//     */
+//    rc = _emm_attach_identify (&ue_mm_context->emm_context);
+//  }
 
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
 }
@@ -585,36 +518,28 @@ emm_proc_attach_request (
  **                  Others:    _emm_data                                  **
  **                                                                        **
  ***************************************************************************/
-int
-emm_proc_attach_reject (
-  mme_ue_s1ap_id_t ue_id,
-  emm_cause_t emm_cause)
+int emm_proc_attach_reject (mme_ue_s1ap_id_t ue_id, emm_cause_t emm_cause)
 {
   OAILOG_FUNC_IN (LOG_NAS_EMM);
+  ue_mm_context_t                        *ue_mm_context = NULL;
   int                                     rc = RETURNerror;
 
-  /*
-   * Create temporary UE context
-   */
-  ue_mm_context_t                      ue_ctx;
+  ue_mm_context = mme_ue_context_exists_mme_ue_s1ap_id (&mme_app_desc.mme_ue_contexts, ue_id);
+  if (ue_mm_context) {
+    if (is_nas_specific_procedure_attach_running (&ue_mm_context->emm_context)) {
+      nas_emm_attach_proc_t     *attach_proc = (nas_emm_attach_proc_t*)ue_mm_context->emm_context.emm_procedures->emm_specific_proc;
 
-  memset (&ue_ctx, 0, sizeof (ue_mm_context_t));
-  ue_ctx.emm_context.is_dynamic = false;
-  ue_ctx.mme_ue_s1ap_id = ue_id;
-  /*
-   * Update the EMM cause code
-   */
-
-  if (ue_id > 0) {
-    ue_ctx.emm_context.emm_cause = emm_cause;
-  } else {
-    ue_ctx.emm_context.emm_cause = EMM_CAUSE_ILLEGAL_UE;
+      attach_proc->emm_cause = emm_cause;
+      emm_sap_t                               emm_sap = {0};
+      emm_sap.primitive = EMMREG_ATTACH_REJ;
+      emm_sap.u.emm_reg.ue_id = ue_id;
+      emm_sap.u.emm_reg.ctx = &ue_mm_context->emm_context;
+      emm_sap.u.emm_reg.notify = false;
+      emm_sap.u.emm_reg.free_proc = true;
+      emm_sap.u.emm_reg.u.attach.attach_proc = attach_proc;
+      rc = emm_sap_send (&emm_sap);
+    }
   }
-
-  /*
-   * Do not accept attach request with protocol error
-   */
-  rc = _emm_attach_reject (&ue_ctx.emm_context);
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
 }
 
@@ -640,18 +565,20 @@ emm_proc_attach_reject (
  **      Others:    _emm_data, T3450                           **
  **                                                                        **
  ***************************************************************************/
-int
-emm_proc_attach_complete (
-  mme_ue_s1ap_id_t ue_id,
-  const_bstring esm_msg_pP)
+int emm_proc_attach_complete (
+  mme_ue_s1ap_id_t                  ue_id,
+  const_bstring                     esm_msg_pP,
+  int                               emm_cause,
+  const nas_message_decode_status_t status)
 {
-  ue_mm_context_t                          *ue_mm_context = NULL;
+  OAILOG_FUNC_IN (LOG_NAS_EMM);
+  ue_mm_context_t                        *ue_mm_context = NULL;
+  nas_emm_attach_proc_t                  *attach_proc = NULL;
   int                                     rc = RETURNerror;
   emm_sap_t                               emm_sap = {0};
   esm_sap_t                               esm_sap = {0};
 
-  OAILOG_FUNC_IN (LOG_NAS_EMM);
-  OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - EPS attach complete (ue_id=" MME_UE_S1AP_ID_FMT ")\n", ue_id);
+
 
   /*
    * Get the UE context
@@ -659,42 +586,40 @@ emm_proc_attach_complete (
   ue_mm_context = mme_ue_context_exists_mme_ue_s1ap_id (&mme_app_desc.mme_ue_contexts, ue_id);
 
   if (ue_mm_context) {
-    REQUIREMENT_3GPP_24_301(R10_5_5_1_2_4__20);
-    /*
-     * Release retransmission timer parameters
-     */
+    if (is_nas_specific_procedure_attach_running (&ue_mm_context->emm_context)) {
+      attach_proc = (nas_emm_attach_proc_t*)ue_mm_context->emm_context.emm_procedures->emm_specific_proc;
 
-    /*
-     * Upon receiving an ATTACH COMPLETE message, the MME shall stop timer T3450
-     */
-    OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Stop timer T3450 (%lx)\n", ue_mm_context->emm_context.T3450.id);
-    ue_mm_context->emm_context.T3450.id = nas_timer_stop (ue_mm_context->emm_context.T3450.id);
-    MSC_LOG_EVENT (MSC_NAS_EMM_MME, "T3450 stopped UE " MME_UE_S1AP_ID_FMT " ", ue_id);
-    emm_proc_specific_cleanup(&ue_mm_context->emm_context.specific_proc);
+      REQUIREMENT_3GPP_24_301(R10_5_5_1_2_4__20);
+      emm_ctx_set_valid_guti(&ue_mm_context->emm_context, &attach_proc->guti);
+      nas_delete_attach_procedure(&ue_mm_context->emm_context);
 
-    /*
-     * Upon receiving an ATTACH COMPLETE message, the MME shall enter state EMM-REGISTERED
-     * and consider the GUTI sent in the ATTACH ACCEPT message as valid.
-     */
-    emm_ctx_set_attribute_valid(&ue_mm_context->emm_context, EMM_CTXT_MEMBER_GUTI);
-    //OAI_GCC_DIAG_OFF(int-to-pointer-cast);
-    mme_ue_context_update_coll_keys ( &mme_app_desc.mme_ue_contexts, ue_mm_context, ue_mm_context->enb_s1ap_id_key, ue_mm_context->mme_ue_s1ap_id,
-    		ue_mm_context->emm_context._imsi64, ue_mm_context->mme_teid_s11, &ue_mm_context->emm_context._guti);
-    //OAI_GCC_DIAG_ON(int-to-pointer-cast);
-    emm_ctx_clear_old_guti(&ue_mm_context->emm_context);
+      /*
+       * Upon receiving an ATTACH COMPLETE message, the MME shall enter state EMM-REGISTERED
+       * and consider the GUTI sent in the ATTACH ACCEPT message as valid.
+       */
+      //OAI_GCC_DIAG_OFF(int-to-pointer-cast);
+      mme_ue_context_update_coll_keys ( &mme_app_desc.mme_ue_contexts, ue_mm_context, ue_mm_context->enb_s1ap_id_key, ue_mm_context->mme_ue_s1ap_id,
+          ue_mm_context->emm_context._imsi64, ue_mm_context->mme_teid_s11, &ue_mm_context->emm_context._guti);
+      //OAI_GCC_DIAG_ON(int-to-pointer-cast);
+      emm_ctx_clear_old_guti(&ue_mm_context->emm_context);
 
-    /*
-     * Forward the Activate Default EPS Bearer Context Accept message
-     * to the EPS session management sublayer
-     */
-    esm_sap.primitive = ESM_DEFAULT_EPS_BEARER_CONTEXT_ACTIVATE_CNF;
-    esm_sap.is_standalone = false;
-    esm_sap.ue_id = ue_id;
-    esm_sap.recv = esm_msg_pP;
-    esm_sap.ctx = &ue_mm_context->emm_context;
-    rc = esm_sap_send (&esm_sap);
+      /*
+       * Forward the Activate Default EPS Bearer Context Accept message
+       * to the EPS session management sublayer
+       */
+      esm_sap.primitive = ESM_DEFAULT_EPS_BEARER_CONTEXT_ACTIVATE_CNF;
+      esm_sap.is_standalone = false;
+      esm_sap.ue_id = ue_id;
+      esm_sap.recv = esm_msg_pP;
+      esm_sap.ctx = &ue_mm_context->emm_context;
+      rc = esm_sap_send (&esm_sap);
+    } else {
+      NOT_REQUIREMENT_3GPP_24_301(R10_5_5_1_2_4__20);
+      OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT " ATTACH COMPLETE discarded (EMM procedure not found)\n", ue_id);
+    }
   } else {
-    OAILOG_ERROR (LOG_NAS_EMM, "EMM-PROC  - No EMM context exists\n");
+    NOT_REQUIREMENT_3GPP_24_301(R10_5_5_1_2_4__20);
+    OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT " ATTACH COMPLETE discarded (context not found)\n", ue_id);
   }
 
 
@@ -703,13 +628,15 @@ emm_proc_attach_complete (
      * Set the network attachment indicator
      */
     ue_mm_context->emm_context.is_attached = true;
-    ue_mm_context->emm_context.is_has_been_attached = true;
     /*
      * Notify EMM that attach procedure has successfully completed
      */
     emm_sap.primitive = EMMREG_ATTACH_CNF;
     emm_sap.u.emm_reg.ue_id = ue_id;
     emm_sap.u.emm_reg.ctx = &ue_mm_context->emm_context;
+    emm_sap.u.emm_reg.notify = true;
+    emm_sap.u.emm_reg.free_proc = true;
+    emm_sap.u.emm_reg.u.attach.attach_proc = attach_proc;
     MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "0 EMMREG_ATTACH_CNF ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
     rc = emm_sap_send (&emm_sap);
   } else if (esm_sap.err != ESM_SAP_DISCARDED) {
@@ -719,6 +646,9 @@ emm_proc_attach_complete (
     emm_sap.primitive = EMMREG_ATTACH_REJ;
     emm_sap.u.emm_reg.ue_id = ue_id;
     emm_sap.u.emm_reg.ctx = &ue_mm_context->emm_context;
+    emm_sap.u.emm_reg.notify = true;
+    emm_sap.u.emm_reg.free_proc = true;
+    emm_sap.u.emm_reg.u.attach.attach_proc = attach_proc;
     rc = emm_sap_send (&emm_sap);
   } else {
     /*
@@ -737,7 +667,20 @@ emm_proc_attach_complete (
 /****************************************************************************/
 
 
-
+static void _emm_proc_create_procedure_attach_request(ue_mm_context_t * const ue_mm_context, emm_attach_request_ies_t * const ies)
+{
+  if (!ue_mm_context->emm_context.emm_procedures) {
+    int rc = nas_new_attach_procedure(&ue_mm_context->emm_context);
+    AssertFatal(RETURNok == rc, "Handle this");
+    nas_emm_attach_proc_t *attach_proc = get_nas_specific_procedure_attach (&ue_mm_context->emm_context);
+    if ((attach_proc)) {
+      attach_proc->ies = ies;
+      ((nas_base_proc_t*)attach_proc)->abort = _emm_attach_abort;
+      ((nas_base_proc_t*)attach_proc)->fail_in = NULL; // No parent procedure
+      ((nas_base_proc_t*)attach_proc)->time_out = _emm_attach_t3450_handler;
+    }
+  }
+}
 /*
  * --------------------------------------------------------------------------
  * Timer handlers
@@ -766,63 +709,49 @@ emm_proc_attach_complete (
  *      Others:    None
  *
  */
-static void *_emm_attach_t3450_handler (void *args)
+static void _emm_attach_t3450_handler (void *args)
 {
   OAILOG_FUNC_IN (LOG_NAS_EMM);
   emm_context_t                          *emm_context = (emm_context_t *) (args);
 
-  if (emm_context) {
-    emm_context->T3450.id = NAS_TIMER_INACTIVE_ID;
-  }
-  if (emm_ctx_is_specific_procedure_running (emm_context, EMM_CTXT_SPEC_PROC_ATTACH)){
-    attach_data_t                          *data =  &emm_context->specific_proc->arg.u.attach_data;
-
-    /*
-     * Increment the retransmission counter
-     */
-    data->retransmission_count += 1;
-    OAILOG_WARNING (LOG_NAS_EMM, "EMM-PROC  - T3450 timer expired, retransmission " "counter = %d\n", data->retransmission_count);
+  if (is_nas_specific_procedure_attach_running (emm_context)) {
+    nas_emm_attach_proc_t *attach_proc = get_nas_specific_procedure_attach (emm_context);
 
 
-    if (data->retransmission_count < ATTACH_COUNTER_MAX) {
+    attach_proc->T3450.id = NAS_TIMER_INACTIVE_ID;
+    attach_proc->attach_accept_sent++;
+
+    OAILOG_WARNING (LOG_NAS_EMM, "EMM-PROC  - T3450 timer expired, retransmission " "counter = %d\n", attach_proc->attach_accept_sent);
+
+
+    if (attach_proc->attach_accept_sent < ATTACH_COUNTER_MAX) {
       REQUIREMENT_3GPP_24_301(R10_5_5_1_2_7_c__1);
       /*
        * On the first expiry of the timer, the network shall retransmit the ATTACH ACCEPT message and shall reset and
        * restart timer T3450.
        */
-      _emm_attach_accept (emm_context);
+      _emm_send_attach_accept (emm_context);
     } else {
       REQUIREMENT_3GPP_24_301(R10_5_5_1_2_7_c__2);
       /*
        * Abort the attach procedure
        */
-      _emm_attach_abort (emm_context);
+      emm_sap_t                               emm_sap = {0};
+      emm_sap.primitive = EMMREG_ATTACH_ABORT;
+      emm_sap.u.emm_reg.ue_id = attach_proc->ue_id;
+      emm_sap.u.emm_reg.ctx   = emm_context;
+      emm_sap.u.emm_reg.notify= true;
+      emm_sap.u.emm_reg.free_proc = true;
+      emm_sap.u.emm_reg.u.attach.attach_proc   = attach_proc;
+      MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "0 EMMREG_ATTACH_ABORT ue id " MME_UE_S1AP_ID_FMT " ", attach_proc->ue_id);
+      emm_sap_send (&emm_sap);
     }
     // TODO REQUIREMENT_3GPP_24_301(R10_5_5_1_2_7_c__3) not coded
   }
-  OAILOG_FUNC_RETURN (LOG_NAS_EMM, NULL);
+  OAILOG_FUNC_OUT (LOG_NAS_EMM);
 }
 
-/*
- * --------------------------------------------------------------------------
- * Abnormal cases in the MME
- * --------------------------------------------------------------------------
- */
-
-/*
- *
- * Name:    _emm_attach_release()
- *
- * Description: Releases the UE context data.
- *
- * Inputs:  args:      Data to be released
- *      Others:    None
- *
- * Outputs:     None
- *      Return:    None
- *      Others:    None
- *
- */
+//------------------------------------------------------------------------------
 static int _emm_attach_release (emm_context_t *emm_context)
 {
   OAILOG_FUNC_IN (LOG_NAS_EMM);
@@ -840,52 +769,9 @@ static int _emm_attach_release (emm_context_t *emm_context)
     emm_ctx_clear_security(emm_context);
     emm_ctx_clear_non_current_security(emm_context);
 
-    bdestroy_wrapper (&emm_context->esm_msg);
-
-
-    /*
-     * Stop timer T3450
-     */
-    if (emm_context->T3450.id != NAS_TIMER_INACTIVE_ID) {
-      OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Stop timer T3450 (%lx)\n", emm_context->T3450.id);
-      emm_context->T3450.id = nas_timer_stop (emm_context->T3450.id);
-      MSC_LOG_EVENT (MSC_NAS_EMM_MME, "T3450 stopped UE " MME_UE_S1AP_ID_FMT " ", ue_id);
-    }
-
-    /*
-     * Stop timer T3460
-     */
-    if (emm_context->T3460.id != NAS_TIMER_INACTIVE_ID) {
-      OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Stop timer T3460 (%lx)\n", emm_context->T3460.id);
-      emm_context->T3460.id = nas_timer_stop (emm_context->T3460.id);
-      MSC_LOG_EVENT (MSC_NAS_EMM_MME, "T3460 stopped UE " MME_UE_S1AP_ID_FMT " ", ue_id);
-    }
-
-    /*
-     * Stop timer T3470
-     */
-    if (emm_context->T3470.id != NAS_TIMER_INACTIVE_ID) {
-      OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Stop timer T3470 (%lx)\n", emm_context->T3470.id);
-      emm_context->T3470.id = nas_timer_stop (emm_context->T3470.id);
-      MSC_LOG_EVENT (MSC_NAS_EMM_MME, "T3470 stopped UE " MME_UE_S1AP_ID_FMT " ", ue_id);
-    }
-
     /*
      * Release the EMM context
      */
-#warning "TODO think about emm_context_remove"
-//    emm_context_remove (&_emm_data, ue_mm_context);
-    /*
-     * Notify EMM that the attach procedure is aborted
-     */
-    MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "0 EMMREG_PROC_ABORT ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
-    emm_sap_t                               emm_sap = {0};
-
-
-    emm_sap.primitive = EMMREG_PROC_ABORT;
-    emm_sap.u.emm_reg.ue_id = ue_id;
-    emm_sap.u.emm_reg.ctx = emm_context;
-    rc = emm_sap_send (&emm_sap);
   }
 
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
@@ -910,57 +796,58 @@ static int _emm_attach_release (emm_context_t *emm_context)
  *      Others:    None
  *
  */
-int _emm_attach_reject (emm_context_t *emm_context)
+int _emm_attach_reject (emm_context_t *emm_context, struct nas_base_proc_s * nas_base_proc)
 {
   OAILOG_FUNC_IN (LOG_NAS_EMM);
   int                                     rc = RETURNerror;
 
-  if (emm_context) {
-    emm_sap_t                               emm_sap = {0};
-    mme_ue_s1ap_id_t      ue_id = PARENT_STRUCT(emm_context, struct ue_mm_context_s, emm_context)->mme_ue_s1ap_id;
+  emm_sap_t                               emm_sap = {0};
+  struct nas_emm_attach_proc_s          * attach_proc = (struct nas_emm_attach_proc_s*)nas_base_proc;
 
-    OAILOG_WARNING (LOG_NAS_EMM, "EMM-PROC  - EMM attach procedure not accepted " "by the network (ue_id=" MME_UE_S1AP_ID_FMT ", cause=%d)\n",
-            ue_id, emm_context->emm_cause);
-    /*
-     * Notify EMM-AS SAP that Attach Reject message has to be sent
-     * onto the network
-     */
-    emm_sap.primitive = EMMAS_ESTABLISH_REJ;
-    emm_sap.u.emm_as.u.establish.ue_id = ue_id;
-    emm_sap.u.emm_as.u.establish.eps_id.guti = NULL;
+  OAILOG_WARNING (LOG_NAS_EMM, "EMM-PROC  - EMM attach procedure not accepted " "by the network (ue_id=" MME_UE_S1AP_ID_FMT ", cause=%d)\n",
+      attach_proc->ue_id, attach_proc->emm_cause);
+  /*
+   * Notify EMM-AS SAP that Attach Reject message has to be sent
+   * onto the network
+   */
+  emm_sap.primitive = EMMAS_ESTABLISH_REJ;
+  emm_sap.u.emm_as.u.establish.ue_id = attach_proc->ue_id;
+  emm_sap.u.emm_as.u.establish.eps_id.guti = NULL;
 
-    if (emm_context->emm_cause == EMM_CAUSE_SUCCESS) {
-      emm_context->emm_cause = EMM_CAUSE_ILLEGAL_UE;
-    }
-
-    emm_sap.u.emm_as.u.establish.emm_cause = emm_context->emm_cause;
-    emm_sap.u.emm_as.u.establish.nas_info = EMM_AS_NAS_INFO_ATTACH;
-
-    if (emm_context->emm_cause != EMM_CAUSE_ESM_FAILURE) {
-      emm_sap.u.emm_as.u.establish.nas_msg = NULL;
-    } else if (emm_context->esm_msg) {
-      emm_sap.u.emm_as.u.establish.nas_msg = emm_context->esm_msg;
-    } else {
-      OAILOG_ERROR (LOG_NAS_EMM, "EMM-PROC  - ESM message is missing\n");
-      OAILOG_FUNC_RETURN (LOG_NAS_EMM, RETURNerror);
-    }
-
-    /*
-     * Setup EPS NAS security data
-     */
-    emm_as_set_security_data (&emm_sap.u.emm_as.u.establish.sctx, &emm_context->_security, false, true);
-    MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "0 EMMAS_ESTABLISH_REJ ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
-    rc = emm_sap_send (&emm_sap);
-
-    /*
-     * Release the UE context, even if the network failed to send the
-     * ATTACH REJECT message
-     */
-    if (emm_context->is_dynamic) {
-      rc = _emm_attach_release (emm_context);
-    }
+  if (attach_proc->emm_cause == EMM_CAUSE_SUCCESS) {
+    attach_proc->emm_cause = EMM_CAUSE_ILLEGAL_UE;
   }
 
+  emm_sap.u.emm_as.u.establish.emm_cause = attach_proc->emm_cause;
+  emm_sap.u.emm_as.u.establish.nas_info = EMM_AS_NAS_INFO_ATTACH;
+
+  if (attach_proc->emm_cause != EMM_CAUSE_ESM_FAILURE) {
+    emm_sap.u.emm_as.u.establish.nas_msg = NULL;
+  } else if (attach_proc->esm_msg_out) {
+    emm_sap.u.emm_as.u.establish.nas_msg = attach_proc->esm_msg_out;
+  } else {
+    OAILOG_ERROR (LOG_NAS_EMM, "EMM-PROC  - ESM message is missing\n");
+    OAILOG_FUNC_RETURN (LOG_NAS_EMM, RETURNerror);
+  }
+
+  /*
+   * Setup EPS NAS security data
+   */
+  if (emm_context) {
+    emm_as_set_security_data (&emm_sap.u.emm_as.u.establish.sctx, &emm_context->_security, false, true);
+  } else {
+    emm_as_set_security_data (&emm_sap.u.emm_as.u.establish.sctx, NULL, false, true);
+  }
+  MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "0 EMMAS_ESTABLISH_REJ ue id " MME_UE_S1AP_ID_FMT " ", attach_proc->ue_id);
+  rc = emm_sap_send (&emm_sap);
+
+  /*
+   * Release the UE context, even if the network failed to send the
+   * ATTACH REJECT message
+   */
+  //if (emm_context->is_dynamic) {
+  //  rc = _emm_attach_release (emm_context);
+  //}
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
 }
 
@@ -978,35 +865,21 @@ int _emm_attach_reject (emm_context_t *emm_context)
  *      Others:    T3450
  *
  */
-static int _emm_attach_abort (emm_context_t *emm_context)
+static int _emm_attach_abort (struct emm_context_s* emm_context, struct nas_base_proc_s * base_proc)
 {
+  OAILOG_FUNC_IN (LOG_NAS_EMM);
   int                                     rc = RETURNerror;
 
-  OAILOG_FUNC_IN (LOG_NAS_EMM);
 
-  if (emm_ctx_is_specific_procedure_running (emm_context, EMM_CTXT_SPEC_PROC_ATTACH)) {
-    attach_data_t                          *data = &emm_context->specific_proc->arg.u.attach_data;
+  nas_emm_attach_proc_t *attach_proc = get_nas_specific_procedure_attach(emm_context);
+  if (attach_proc) {
+
     mme_ue_s1ap_id_t                        ue_id = PARENT_STRUCT(emm_context, struct ue_mm_context_s, emm_context)->mme_ue_s1ap_id;
     esm_sap_t                               esm_sap = {0};
 
     OAILOG_WARNING (LOG_NAS_EMM, "EMM-PROC  - Abort the attach procedure (ue_id=" MME_UE_S1AP_ID_FMT ")\n", ue_id);
 
-    AssertFatal(EMM_SPECIFIC_PROC_TYPE_ATTACH == emm_context->specific_proc->type, "Mismatch in specific proc arg type %d UE id" MME_UE_S1AP_ID_FMT "\n",
-        emm_context->specific_proc->type, ue_id);
-    AssertFatal(ue_id == data->ue_id, "Mismatch in UE ids: ctx UE id" MME_UE_S1AP_ID_FMT " data UE id" MME_UE_S1AP_ID_FMT "\n", ue_id, data->ue_id);
-    /*
-     * Stop timer T3450
-     */
-    if (emm_context->T3450.id != NAS_TIMER_INACTIVE_ID) {
-      OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Stop timer T3450 (%lx)\n", emm_context->T3450.id);
-      emm_context->T3450.id = nas_timer_stop (emm_context->T3450.id);
-      MSC_LOG_EVENT (MSC_NAS_EMM_MME, "T3450 stopped UE " MME_UE_S1AP_ID_FMT " ", ue_id);
-    }
 
-    /*
-     * Release retransmission timer parameters
-     */
-    bdestroy_wrapper (&data->esm_msg);
     /*
      * Notify ESM that the network locally refused PDN connectivity
      * to the UE
@@ -1018,25 +891,19 @@ static int _emm_attach_abort (emm_context_t *emm_context)
     esm_sap.recv = NULL;
     rc = esm_sap_send (&esm_sap);
 
-    if (rc != RETURNerror) {
-      /*
-       * Notify EMM that EPS attach procedure failed
-       */
-      MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_ESM_MME, NULL, 0, "0 EMMREG_ATTACH_REJ ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
-      emm_sap_t                               emm_sap = {0};
+    /*
+     * Notify EMM that EPS attach procedure failed
+     */
+    MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_ESM_MME, NULL, 0, "0 EMMREG_ATTACH_REJ ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
+    emm_sap_t                               emm_sap = {0};
 
-      emm_sap.primitive = EMMREG_ATTACH_REJ;
-      emm_sap.u.emm_reg.ue_id = ue_id;
-      emm_sap.u.emm_reg.ctx = emm_context;
-      rc = emm_sap_send (&emm_sap);
-
-      if (rc != RETURNerror) {
-        /*
-         * Release the UE context
-         */
-        rc = _emm_attach_release (emm_context);
-      }
-    }
+    emm_sap.primitive = EMMREG_ATTACH_REJ;
+    emm_sap.u.emm_reg.ue_id = ue_id;
+    emm_sap.u.emm_reg.ctx = emm_context;
+    emm_sap.u.emm_reg.notify = true;
+    emm_sap.u.emm_reg.free_proc = true;
+    emm_sap.u.emm_reg.u.attach.attach_proc = attach_proc;
+    rc = emm_sap_send (&emm_sap);
   }
 
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
@@ -1048,171 +915,212 @@ static int _emm_attach_abort (emm_context_t *emm_context)
  * --------------------------------------------------------------------------
  */
 
-/*
- * Name:    _emm_attach_identify()
- *
- * Description: Performs UE's identification. May initiates identification, authentication and security mode control EMM common procedures.
- *
- * Inputs:  args:      Identification argument parameters
- *      Others:    None
- *
- * Outputs:     None
- *      Return:    RETURNok, RETURNerror
- *      Others:    _emm_data
- *
- */
-static int _emm_attach_identify (emm_context_t *emm_context)
+static int _emm_attach_run_procedure(emm_context_t *emm_context)
+{
+  OAILOG_FUNC_IN (LOG_NAS_EMM);
+  int                                     rc = RETURNerror;
+  nas_emm_attach_proc_t                  *attach_proc = get_nas_specific_procedure_attach(emm_context);
+
+  if (attach_proc) {
+    REQUIREMENT_3GPP_24_301(R10_5_5_1_2_3__1);
+    if (attach_proc->ies->imsi) {
+      if (attach_proc->ies->decode_status.mac_matched) {
+        // force authentication, even if not necessary
+        rc = _emm_start_attach_proc_authentication (emm_context, attach_proc);//, IDENTITY_TYPE_2_IMSI, _emm_attach_authentified, _emm_attach_release);
+      } else {
+        // force identification, even if not necessary
+        rc = emm_proc_identification (emm_context, (nas_emm_proc_t *)attach_proc, IDENTITY_TYPE_2_IMSI, _emm_attach_success_identification_cb, _emm_attach_failure_identification_cb);
+      }
+    } else if (attach_proc->ies->guti) {
+      rc = emm_proc_identification (emm_context, (nas_emm_proc_t *)attach_proc, IDENTITY_TYPE_2_IMSI, _emm_attach_success_identification_cb, _emm_attach_failure_identification_cb);
+    } else if (attach_proc->ies->imei) {
+      // emergency allowed if go here, but have to be implemented...
+      AssertFatal(0, "TODO emergency");
+    }
+  }
+  OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
+}
+
+//------------------------------------------------------------------------------
+static int _emm_attach_success_identification_cb (emm_context_t *emm_context)
 {
   OAILOG_FUNC_IN (LOG_NAS_EMM);
   int                                     rc = RETURNerror;
 
-  REQUIREMENT_3GPP_24_301(R10_5_5_1_2_3__1);
-  mme_ue_s1ap_id_t                        ue_id = PARENT_STRUCT(emm_context, struct ue_mm_context_s, emm_context)->mme_ue_s1ap_id;
-  OAILOG_INFO (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " EMM-PROC  - Identify incoming UE using %s\n",
-      ue_id,
-      IS_EMM_CTXT_VALID_IMSI(emm_context)   ? "IMSI" :
-      IS_EMM_CTXT_PRESENT_GUTI(emm_context) ? "GUTI" :
-      IS_EMM_CTXT_VALID_IMEI(emm_context)   ? "IMEI" : "none");
+  nas_emm_attach_proc_t                  *attach_proc = get_nas_specific_procedure_attach(emm_context);
 
-  /*
-   * UE's identification
-   * -------------------
-   */
-  if (IS_EMM_CTXT_PRESENT_IMSI(emm_context)) {
-    // The UE identifies itself using an IMSI
-    if (!IS_EMM_CTXT_PRESENT_AUTH_VECTORS(emm_context)) {
-      // Ask upper layer to fetch new security context
-      plmn_t visited_plmn = {0};
-      visited_plmn.mcc_digit1 = emm_context->originating_tai.mcc_digit1;
-      visited_plmn.mcc_digit2 = emm_context->originating_tai.mcc_digit2;
-      visited_plmn.mcc_digit3 = emm_context->originating_tai.mcc_digit3;
-      visited_plmn.mnc_digit1 = emm_context->originating_tai.mnc_digit1;
-      visited_plmn.mnc_digit2 = emm_context->originating_tai.mnc_digit2;
-      visited_plmn.mnc_digit3 = emm_context->originating_tai.mnc_digit3;
-
-      nas_itti_auth_info_req (ue_id, &emm_context->_imsi, true, &visited_plmn, MAX_EPS_AUTH_VECTORS, NULL);
-      rc = RETURNok;
-    } else {
-      ksi_t                                   eksi = 0;
-      int                                     vindex = 0;
-
-      if (emm_context->_security.eksi != KSI_NO_KEY_AVAILABLE) {
-        REQUIREMENT_3GPP_24_301(R10_5_4_2_4__2);
-        eksi = (emm_context->_security.eksi + 1) % (EKSI_MAX_VALUE + 1);
-      }
-      for (vindex = 0; vindex < MAX_EPS_AUTH_VECTORS; vindex++) {
-        if (IS_EMM_CTXT_PRESENT_AUTH_VECTOR(emm_context, vindex)) {
-          break;
-        }
-      }
-      // eksi should always be 0
-      /*if (!IS_EMM_CTXT_PRESENT_AUTH_VECTORS(ue_mm_context)) {
-        // Ask upper layer to fetch new security context
-        nas_itti_auth_info_req (ue_mm_context->mme_ue_s1ap_id, ue_mm_context->_imsi64, true, &ue_mm_context->originating_tai.plmn, MAX_EPS_AUTH_VECTORS, NULL);
-        rc = RETURNok;
-      } else */{
-        emm_ctx_set_security_vector_index(emm_context, vindex);
-        rc = emm_proc_authentication (emm_context, ue_id, eksi,
-          emm_context->_vector[vindex].rand, emm_context->_vector[vindex].autn, emm_attach_security, _emm_attach_reject, NULL);
-        OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
-      }
-    }
-  } else if (IS_EMM_CTXT_PRESENT_GUTI(emm_context)) {
-    // The UE identifies itself using a GUTI
-    //LG Force identification here
-    emm_ctx_clear_attribute_valid(emm_context, EMM_CTXT_MEMBER_AUTH_VECTORS);
-    OAILOG_WARNING (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " EMM-PROC  - Failed to identify the UE using provided GUTI (tmsi=%u)\n",
-         ue_id, emm_context->_guti.m_tmsi);
-    /*
-     * 3GPP TS 24.401, Figure 5.3.2.1-1, point 4
-     * The UE was attempting to attach to the network using a GUTI
-     * that is not known by the network; the MME shall initiate an
-     * identification procedure to retrieve the IMSI from the UE.
-     */
-    rc = emm_proc_identification (emm_context, EMM_IDENT_TYPE_IMSI, _emm_attach_identify, _emm_attach_release, _emm_attach_release);
-
-    if (rc != RETURNok) {
-      // Failed to initiate the identification procedure
-      OAILOG_WARNING (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT "EMM-PROC  - Failed to initiate identification procedure\n", ue_id);
-      emm_context->emm_cause = EMM_CAUSE_ILLEGAL_UE;
-      // Do not accept the UE to attach to the network
-      rc = _emm_attach_reject (emm_context);
-    }
-
-    // Relevant callback will be executed when identification
-    // procedure completes
-    OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
-
-  } else if (IS_EMM_CTXT_PRESENT_OLD_GUTI(emm_context)) {
-
-    OAILOG_WARNING (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " EMM-PROC  - Force to identify the UE using provided old GUTI "GUTI_FMT"\n",
-        ue_id, GUTI_ARG(&emm_context->_old_guti));
-    /*
-     * 3GPP TS 24.401, Figure 5.3.2.1-1, point 4
-     * The UE was attempting to attach to the network using a GUTI
-     * that is not known by the network; the MME shall initiate an
-     * identification procedure to retrieve the IMSI from the UE.
-     */
-    rc = emm_proc_identification (emm_context, EMM_IDENT_TYPE_IMSI, _emm_attach_identify, _emm_attach_release, _emm_attach_release);
-
-    if (rc != RETURNok) {
-      // Failed to initiate the identification procedure
-      OAILOG_WARNING (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT "EMM-PROC  - Failed to initiate identification procedure\n", ue_id);
-      emm_context->emm_cause = EMM_CAUSE_ILLEGAL_UE;
-      // Do not accept the UE to attach to the network
-      rc = _emm_attach_reject (emm_context);
-    }
-
-    // Relevant callback will be executed when identification
-    // procedure completes
-    OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
-  } else if ((IS_EMM_CTXT_VALID_IMEI(emm_context)) && (emm_context->is_emergency)) {
-    /*
-     * The UE is attempting to attach to the network for emergency
-     * services using an IMEI
-     */
-     AssertFatal(0 != 0, "TODO emergency services...");
-    if (rc != RETURNok) {
-      emm_ctx_clear_auth_vectors(emm_context);
-      OAILOG_WARNING (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " EMM-PROC  - " "Failed to identify the UE using provided IMEI\n", ue_id);
-      emm_context->emm_cause = EMM_CAUSE_IMEI_NOT_ACCEPTED;
-    }
-  } else {
-    OAILOG_WARNING (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " EMM-PROC  - UE's identity is not available\n", ue_id);
-    emm_context->emm_cause = EMM_CAUSE_ILLEGAL_UE;
+  if (attach_proc) {
+    REQUIREMENT_3GPP_24_301(R10_5_5_1_2_3__1);
+    rc = _emm_start_attach_proc_authentication (emm_context, attach_proc);//, IDENTITY_TYPE_2_IMSI, _emm_attach_authentified, _emm_attach_release);
   }
-
-  /*
-   * UE's authentication
-   * -------------------
-   */
-  if (rc != RETURNerror) {
-    if (IS_EMM_CTXT_VALID_SECURITY(emm_context)) {
-      /*
-       * A security context exists for the UE in the network;
-       * proceed with the attach procedure.
-       */
-      rc = _emm_attach (emm_context);
-    } else if ((emm_context->is_emergency) && (_emm_data.conf.features & MME_API_UNAUTHENTICATED_IMSI)) {
-      /*
-       * 3GPP TS 24.301, section 5.5.1.2.3
-       * 3GPP TS 24.401, Figure 5.3.2.1-1, point 5a
-       * MME configured to support Emergency Attach for unauthenticated
-       * IMSIs may choose to skip the authentication procedure even if
-       * no EPS security context is available and proceed directly to the
-       * execution of the security mode control procedure.
-       */
-      rc = _emm_attach_security (emm_context);
-    }
-  }
-
-  if (rc != RETURNok) {
-    // Do not accept the UE to attach to the network
-    rc = _emm_attach_reject (emm_context);
-  }
-
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
 }
+
+//------------------------------------------------------------------------------
+static int _emm_attach_failure_identification_cb (emm_context_t *emm_context)
+{
+  OAILOG_FUNC_IN (LOG_NAS_EMM);
+  int                                     rc = RETURNerror;
+  AssertFatal(0, "Cannot happen...\n");
+  OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
+}
+
+//------------------------------------------------------------------------------
+static int _emm_start_attach_proc_authentication (emm_context_t *emm_context, nas_emm_attach_proc_t* attach_proc)
+{
+  OAILOG_FUNC_IN (LOG_NAS_EMM);
+  int                                     rc = RETURNerror;
+
+  if ((emm_context) && (attach_proc)) {
+    rc = emm_proc_authentication (emm_context, &attach_proc->emm_spec_proc, _emm_attach_success_authentication_cb, _emm_attach_failure_authentication_cb);
+  }
+  OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
+}
+
+//------------------------------------------------------------------------------
+static int _emm_attach_success_authentication_cb (emm_context_t *emm_context)
+{
+  OAILOG_FUNC_IN (LOG_NAS_EMM);
+  int                                     rc = RETURNerror;
+
+  nas_emm_attach_proc_t                  *attach_proc = get_nas_specific_procedure_attach(emm_context);
+
+  if (attach_proc) {
+    REQUIREMENT_3GPP_24_301(R10_5_5_1_2_3__1);
+    rc = _emm_start_attach_proc_security (emm_context, attach_proc);
+  }
+  OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
+}
+
+//------------------------------------------------------------------------------
+static int _emm_attach_failure_authentication_cb (emm_context_t *emm_context)
+{
+  OAILOG_FUNC_IN (LOG_NAS_EMM);
+  int                                     rc = RETURNerror;
+  nas_emm_attach_proc_t                  *attach_proc = get_nas_specific_procedure_attach(emm_context);
+
+  if (attach_proc) {
+    emm_sap_t emm_sap                      = {0};
+    emm_sap.primitive                      = EMMREG_ATTACH_REJ;
+    emm_sap.u.emm_reg.ue_id                = attach_proc->ue_id;
+    emm_sap.u.emm_reg.ctx                  = emm_context;
+    emm_sap.u.emm_reg.notify               = true;
+    emm_sap.u.emm_reg.free_proc            = true;
+    emm_sap.u.emm_reg.u.attach.attach_proc = attach_proc;
+    // dont care emm_sap.u.emm_reg.u.attach.is_emergency = false;
+    rc = emm_sap_send (&emm_sap);
+  }
+  OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
+}
+
+//------------------------------------------------------------------------------
+static int _emm_start_attach_proc_security (emm_context_t *emm_context, nas_emm_attach_proc_t* attach_proc)
+{
+  OAILOG_FUNC_IN (LOG_NAS_EMM);
+  int                                     rc = RETURNerror;
+
+  if ((emm_context) && (attach_proc)) {
+    REQUIREMENT_3GPP_24_301(R10_5_5_1_2_3__1);
+    mme_ue_s1ap_id_t                        ue_id = PARENT_STRUCT(emm_context, struct ue_mm_context_s, emm_context)->mme_ue_s1ap_id;
+   /*
+     * Create new NAS security context
+     */
+    emm_ctx_clear_security(emm_context);
+    rc = emm_proc_security_mode_control (emm_context, &attach_proc->emm_spec_proc, attach_proc->ksi, _emm_attach_success_security_cb, _emm_attach_failure_security_cb);
+    if (rc != RETURNok) {
+      /*
+       * Failed to initiate the security mode control procedure
+       */
+      OAILOG_WARNING (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT "EMM-PROC  - Failed to initiate security mode control procedure\n", ue_id);
+      attach_proc->emm_cause = EMM_CAUSE_ILLEGAL_UE;
+      /*
+       * Do not accept the UE to attach to the network
+       */
+      emm_sap_t emm_sap                      = {0};
+      emm_sap.primitive                      = EMMREG_ATTACH_REJ;
+      emm_sap.u.emm_reg.ue_id                = ue_id;
+      emm_sap.u.emm_reg.ctx                  = emm_context;
+      emm_sap.u.emm_reg.notify               = true;
+      emm_sap.u.emm_reg.free_proc            = true;
+      emm_sap.u.emm_reg.u.attach.attach_proc = attach_proc;
+      // dont care emm_sap.u.emm_reg.u.attach.is_emergency = false;
+      rc = emm_sap_send (&emm_sap);
+    }
+  }
+  OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
+}
+
+//------------------------------------------------------------------------------
+static int _emm_attach_success_security_cb (emm_context_t *emm_context)
+{
+  OAILOG_FUNC_IN (LOG_NAS_EMM);
+  int                                     rc = RETURNerror;
+
+  nas_emm_attach_proc_t                  *attach_proc = get_nas_specific_procedure_attach(emm_context);
+
+  if (attach_proc) {
+    rc = _emm_attach(emm_context);
+  }
+  OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
+}
+
+//------------------------------------------------------------------------------
+static int _emm_attach_failure_security_cb (emm_context_t *emm_context)
+{
+  OAILOG_FUNC_IN (LOG_NAS_EMM);
+  int                                     rc = RETURNerror;
+  nas_emm_attach_proc_t                  *attach_proc = get_nas_specific_procedure_attach(emm_context);
+
+  if (attach_proc) {
+    _emm_attach_release(emm_context);
+  }
+  OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
+}
+
+//
+//  rc = _emm_start_attach_proc_authentication (emm_context, attach_proc);//, IDENTITY_TYPE_2_IMSI, _emm_attach_authentified, _emm_attach_release);
+//
+//  if ((emm_context) && (attach_proc)) {
+//    REQUIREMENT_3GPP_24_301(R10_5_5_1_2_3__1);
+//    mme_ue_s1ap_id_t                        ue_id = PARENT_STRUCT(emm_context, struct ue_mm_context_s, emm_context)->mme_ue_s1ap_id;
+//    OAILOG_INFO (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " EMM-PROC  - Setup NAS security\n", ue_id);
+//
+//    attach_proc->emm_spec_proc.emm_proc.base_proc.success_notif = _emm_attach_success_authentication_cb;
+//    attach_proc->emm_spec_proc.emm_proc.base_proc.failure_notif = _emm_attach_failure_authentication_cb;
+//    /*
+//     * Create new NAS security context
+//     */
+//    emm_ctx_clear_security(emm_context);
+//
+//    /*
+//     * Initialize the security mode control procedure
+//     */
+//    rc = emm_proc_security_mode_control (ue_id, emm_context->auth_ksi,
+//                                         _emm_attach, _emm_attach_release);
+//
+//    if (rc != RETURNok) {
+//      /*
+//       * Failed to initiate the security mode control procedure
+//       */
+//      OAILOG_WARNING (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT "EMM-PROC  - Failed to initiate security mode control procedure\n", ue_id);
+//      attach_proc->emm_cause = EMM_CAUSE_ILLEGAL_UE;
+//      /*
+//       * Do not accept the UE to attach to the network
+//       */
+//      emm_sap_t emm_sap                      = {0};
+//      emm_sap.primitive                      = EMMREG_ATTACH_REJ;
+//      emm_sap.u.emm_reg.ue_id                = ue_id;
+//      emm_sap.u.emm_reg.ctx                  = emm_context;
+//      emm_sap.u.emm_reg.notify               = true;
+//      emm_sap.u.emm_reg.free_proc            = true;
+//      emm_sap.u.emm_reg.u.attach.attach_proc = attach_proc;
+//      // dont care emm_sap.u.emm_reg.u.attach.is_emergency = false;
+//      rc = emm_sap_send (&emm_sap);
+//    }
+//  }
+//  OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
+//}
+
 
 /****************************************************************************
  **                                                                        **
@@ -1238,34 +1146,45 @@ static int _emm_attach_security (emm_context_t *emm_context)
 {
   OAILOG_FUNC_IN (LOG_NAS_EMM);
   int                                     rc = RETURNerror;
-  mme_ue_s1ap_id_t                        ue_id = PARENT_STRUCT(emm_context, struct ue_mm_context_s, emm_context)->mme_ue_s1ap_id;
 
-  REQUIREMENT_3GPP_24_301(R10_5_5_1_2_3__1);
-  OAILOG_INFO (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " EMM-PROC  - Setup NAS security\n", ue_id);
+  nas_emm_attach_proc_t                  *attach_proc = get_nas_specific_procedure_attach(emm_context);
 
-  /*
-   * Create new NAS security context
-   */
-  emm_ctx_clear_security(emm_context);
+  if (attach_proc) {
+    REQUIREMENT_3GPP_24_301(R10_5_5_1_2_3__1);
+    mme_ue_s1ap_id_t                        ue_id = PARENT_STRUCT(emm_context, struct ue_mm_context_s, emm_context)->mme_ue_s1ap_id;
+    OAILOG_INFO (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " EMM-PROC  - Setup NAS security\n", ue_id);
 
-  /*
-   * Initialize the security mode control procedure
-   */
-  rc = emm_proc_security_mode_control (ue_id, emm_context->ue_ksi,
-                                       _emm_attach, _emm_attach_release, _emm_attach_release);
-
-  if (rc != RETURNok) {
     /*
-     * Failed to initiate the security mode control procedure
+     * Create new NAS security context
      */
-    OAILOG_WARNING (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT "EMM-PROC  - Failed to initiate security mode control procedure\n", ue_id);
-    emm_context->emm_cause = EMM_CAUSE_ILLEGAL_UE;
+    emm_ctx_clear_security(emm_context);
+
     /*
-     * Do not accept the UE to attach to the network
+     * Initialize the security mode control procedure
      */
-    rc = _emm_attach_reject (emm_context);
+    rc = emm_proc_security_mode_control (emm_context, &attach_proc->emm_spec_proc, attach_proc->ksi,
+                                         _emm_attach, _emm_attach_release);
+
+    if (rc != RETURNok) {
+      /*
+       * Failed to initiate the security mode control procedure
+       */
+      OAILOG_WARNING (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT "EMM-PROC  - Failed to initiate security mode control procedure\n", ue_id);
+      attach_proc->emm_cause = EMM_CAUSE_ILLEGAL_UE;
+      /*
+       * Do not accept the UE to attach to the network
+       */
+      emm_sap_t emm_sap                      = {0};
+      emm_sap.primitive                      = EMMREG_ATTACH_REJ;
+      emm_sap.u.emm_reg.ue_id                = ue_id;
+      emm_sap.u.emm_reg.ctx                  = emm_context;
+      emm_sap.u.emm_reg.notify               = true;
+      emm_sap.u.emm_reg.free_proc            = true;
+      emm_sap.u.emm_reg.u.attach.attach_proc = attach_proc;
+      // dont care emm_sap.u.emm_reg.u.attach.is_emergency = false;
+      rc = emm_sap_send (&emm_sap);
+    }
   }
-
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
 }
 
@@ -1298,65 +1217,52 @@ static int _emm_attach_security (emm_context_t *emm_context)
 static int _emm_attach (emm_context_t *emm_context)
 {
   OAILOG_FUNC_IN (LOG_NAS_EMM);
-  esm_sap_t                               esm_sap = {0};
   int                                     rc = RETURNerror;
   mme_ue_s1ap_id_t                        ue_id = PARENT_STRUCT(emm_context, struct ue_mm_context_s, emm_context)->mme_ue_s1ap_id;
 
   OAILOG_INFO (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " EMM-PROC  - Attach UE \n", ue_id);
-  /*
-   * 3GPP TS 24.401, Figure 5.3.2.1-1, point 5a
-   * At this point, all NAS messages shall be protected by the NAS security
-   * functions (integrity and ciphering) indicated by the MME unless the UE
-   * is emergency attached and not successfully authenticated.
-   */
-  /*
-   * Notify ESM that PDN connectivity is requested
-   */
-  MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_ESM_MME, NULL, 0, "0 ESM_PDN_CONNECTIVITY_REQ ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
 
-  esm_sap.primitive = ESM_PDN_CONNECTIVITY_REQ;
-  esm_sap.is_standalone = false;
-  esm_sap.ue_id = ue_id;
-  esm_sap.ctx = emm_context;
-  esm_sap.recv = emm_context->esm_msg;
-  rc = esm_sap_send (&esm_sap);
+  nas_emm_attach_proc_t                  *attach_proc = get_nas_specific_procedure_attach(emm_context);
 
-  if ((rc != RETURNerror) && (esm_sap.err == ESM_SAP_SUCCESS)) {
-    /*
-     * The attach request is accepted by the network
-     */
-    /*
-     * Delete the stored UE radio capability information, if any
-     */
-    /*
-     * Store the UE network capability
-     */
-    /*
-     * Assign the TAI list the UE is registered to
-     */
-    /*
-     * Allocate parameters of the retransmission timer callback
-     */
-    rc = RETURNok;
-  } else if (esm_sap.err != ESM_SAP_DISCARDED) {
-    /*
-     * The attach procedure failed due to an ESM procedure failure
-     */
-    emm_context->emm_cause = EMM_CAUSE_ESM_FAILURE;
+  if (attach_proc) {
+    if (attach_proc->ies->esm_msg) {
+      /*
+       * Notify ESM that PDN connectivity is requested
+       */
+      MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_ESM_MME, NULL, 0, "0 ESM_PDN_CONNECTIVITY_REQ ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
 
-    /*
-     * Setup the ESM message container to include PDN Connectivity Reject
-     * message within the Attach Reject message
-     */
-    bdestroy_wrapper (&emm_context->esm_msg);
-    emm_context->esm_msg = esm_sap.send;
-    rc = _emm_attach_reject (emm_context);
-  } else {
-    /*
-     * ESM procedure failed and, received message has been discarded or
-     * Status message has been returned; ignore ESM procedure failure
-     */
-    rc = RETURNok;
+      esm_sap_t          esm_sap = {0};
+      esm_sap.primitive = ESM_UNITDATA_IND;
+      esm_sap.is_standalone = false;
+      esm_sap.ue_id = ue_id;
+      esm_sap.ctx = emm_context;
+      esm_sap.recv = attach_proc->ies->esm_msg;
+      rc = esm_sap_send (&esm_sap);
+      if ((rc != RETURNerror) && (esm_sap.err == ESM_SAP_SUCCESS)) {
+        rc = RETURNok;
+      } else if (esm_sap.err != ESM_SAP_DISCARDED) {
+        /*
+         * The attach procedure failed due to an ESM procedure failure
+         */
+        attach_proc->emm_cause = EMM_CAUSE_ESM_FAILURE;
+
+        /*
+         * Setup the ESM message container to include PDN Connectivity Reject
+         * message within the Attach Reject message
+         */
+        bdestroy_wrapper (&attach_proc->ies->esm_msg);
+        attach_proc->esm_msg_out = esm_sap.send;
+        rc = _emm_attach_reject (emm_context, &attach_proc->emm_spec_proc.emm_proc.base_proc);
+      } else {
+        /*
+         * ESM procedure failed and, received message has been discarded or
+         * Status message has been returned; ignore ESM procedure failure
+         */
+        rc = RETURNok;
+      }
+    } else {
+      rc = _emm_send_attach_accept(emm_context);
+    }
   }
 
   if (rc != RETURNok) {
@@ -1364,11 +1270,11 @@ static int _emm_attach (emm_context_t *emm_context)
      * The attach procedure failed
      */
     OAILOG_WARNING (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " EMM-PROC  - Failed to respond to Attach Request\n", ue_id);
-    emm_context->emm_cause = EMM_CAUSE_PROTOCOL_ERROR;
+    attach_proc->emm_cause = EMM_CAUSE_PROTOCOL_ERROR;
     /*
      * Do not accept the UE to attach to the network
      */
-    rc = _emm_attach_reject (emm_context);
+    rc = _emm_attach_reject (emm_context, &attach_proc->emm_spec_proc.emm_proc.base_proc);
   }
 
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
@@ -1376,12 +1282,12 @@ static int _emm_attach (emm_context_t *emm_context)
 
 int emm_cn_wrapper_attach_accept (emm_context_t * emm_context)
 {
-  return _emm_attach_accept (emm_context);
+  return _emm_send_attach_accept (emm_context);
 }
 
 /****************************************************************************
  **                                                                        **
- ** Name:    _emm_attach_accept()                                      **
+ ** Name:    _emm_send_attach_accept()                                      **
  **                                                                        **
  ** Description: Sends ATTACH ACCEPT message and start timer T3450         **
  **                                                                        **
@@ -1393,127 +1299,127 @@ int emm_cn_wrapper_attach_accept (emm_context_t * emm_context)
  **      Others:    T3450                                      **
  **                                                                        **
  ***************************************************************************/
-static int _emm_attach_accept (emm_context_t * emm_context)
+static int _emm_send_attach_accept (emm_context_t * emm_context)
 {
   OAILOG_FUNC_IN (LOG_NAS_EMM);
-  emm_sap_t                               emm_sap = {0};
   int                                     rc = RETURNerror;
-  mme_ue_s1ap_id_t                        ue_id = PARENT_STRUCT(emm_context, struct ue_mm_context_s, emm_context)->mme_ue_s1ap_id;
 
 
   // may be caused by timer not stopped when deleted context
   if (emm_context) {
-    /*
-     * Notify EMM-AS SAP that Attach Accept message together with an Activate
-     * Default EPS Bearer Context Request message has to be sent to the UE
-     */
-    emm_sap.primitive = EMMAS_ESTABLISH_CNF;
-    emm_sap.u.emm_as.u.establish.ue_id = ue_id;
-    emm_sap.u.emm_as.u.establish.nas_info = EMM_AS_NAS_INFO_ATTACH;
+    nas_emm_attach_proc_t                  *attach_proc = get_nas_specific_procedure_attach(emm_context);
 
-    NO_REQUIREMENT_3GPP_24_301(R10_5_5_1_2_4__3);
-    //----------------------------------------
-    REQUIREMENT_3GPP_24_301(R10_5_5_1_2_4__4);
-    emm_ctx_set_attribute_valid(emm_context, EMM_CTXT_MEMBER_UE_NETWORK_CAPABILITY_IE);
-    emm_ctx_set_attribute_valid(emm_context, EMM_CTXT_MEMBER_MS_NETWORK_CAPABILITY_IE);
-    //----------------------------------------
-    REQUIREMENT_3GPP_24_301(R10_5_5_1_2_4__5);
-    emm_ctx_set_valid_current_drx_parameter(emm_context, &emm_context->_pending_drx_parameter);
-    emm_ctx_clear_pending_current_drx_parameter(emm_context);
-    //----------------------------------------
-    REQUIREMENT_3GPP_24_301(R10_5_5_1_2_4__9);
-    // the set of emm_sap.u.emm_as.u.establish.new_guti is for including the GUTI in the attach accept message
-    //ONLY ONE MME NOW NO S10
-    if (!IS_EMM_CTXT_PRESENT_GUTI(emm_context)) {
-      // Sure it is an unknown GUTI in this MME
-      guti_t old_guti = emm_context->_old_guti;
-      guti_t guti     = {.gummei.plmn = {0},
-                         .gummei.mme_gid = 0,
-                         .gummei.mme_code = 0,
-                         .m_tmsi = INVALID_M_TMSI};
-      clear_guti(&guti);
+    if (attach_proc) {
+      emm_sap_t                               emm_sap = {0};
+      mme_ue_s1ap_id_t                        ue_id = PARENT_STRUCT(emm_context, struct ue_mm_context_s, emm_context)->mme_ue_s1ap_id;
 
-      rc = mme_api_new_guti (&emm_context->_imsi, &old_guti, &guti, &emm_context->originating_tai, &emm_context->_tai_list);
-      if ( RETURNok == rc) {
-        emm_ctx_set_guti(emm_context, &guti);
-        emm_ctx_set_attribute_valid(emm_context, EMM_CTXT_MEMBER_TAI_LIST);
-        //----------------------------------------
-        REQUIREMENT_3GPP_24_301(R10_5_5_1_2_4__6);
-        REQUIREMENT_3GPP_24_301(R10_5_5_1_2_4__10);
-        memcpy(&emm_sap.u.emm_as.u.establish.tai_list, &emm_context->_tai_list, sizeof(tai_list_t));
-      } else {
-        OAILOG_FUNC_RETURN (LOG_NAS_EMM, RETURNerror);
+      _emm_attach_update(emm_context, attach_proc->ies);
+      /*
+       * Notify EMM-AS SAP that Attach Accept message together with an Activate
+       * Default EPS Bearer Context Request message has to be sent to the UE
+       */
+      emm_sap.primitive = EMMAS_ESTABLISH_CNF;
+      emm_sap.u.emm_as.u.establish.ue_id = ue_id;
+      emm_sap.u.emm_as.u.establish.nas_info = EMM_AS_NAS_INFO_ATTACH;
+
+      NO_REQUIREMENT_3GPP_24_301(R10_5_5_1_2_4__3);
+      if (emm_context->ue_radio_capability_information) {
+        bdestroy_wrapper(&emm_context->ue_radio_capability_information);
       }
-    }
+      //----------------------------------------
+      REQUIREMENT_3GPP_24_301(R10_5_5_1_2_4__4);
+      emm_ctx_set_attribute_valid(emm_context, EMM_CTXT_MEMBER_UE_NETWORK_CAPABILITY_IE);
+      emm_ctx_set_attribute_valid(emm_context, EMM_CTXT_MEMBER_MS_NETWORK_CAPABILITY_IE);
+      //----------------------------------------
+      if (attach_proc->ies->drx_parameter) {
+        REQUIREMENT_3GPP_24_301(R10_5_5_1_2_4__5);
+        emm_ctx_set_valid_drx_parameter(emm_context, attach_proc->ies->drx_parameter);
+      }
+      //----------------------------------------
+      REQUIREMENT_3GPP_24_301(R10_5_5_1_2_4__9);
+      // the set of emm_sap.u.emm_as.u.establish.new_guti is for including the GUTI in the attach accept message
+      //ONLY ONE MME NOW NO S10
+      if (!IS_EMM_CTXT_PRESENT_GUTI(emm_context)) {
+        // Sure it is an unknown GUTI in this MME
+        guti_t old_guti = emm_context->_old_guti;
+        guti_t guti     = {.gummei.plmn = {0},
+                           .gummei.mme_gid = 0,
+                           .gummei.mme_code = 0,
+                           .m_tmsi = INVALID_M_TMSI};
+        clear_guti(&guti);
 
-    emm_sap.u.emm_as.u.establish.eps_id.guti = &emm_context->_guti;
+        rc = mme_api_new_guti (&emm_context->_imsi, &old_guti, &guti, &emm_context->originating_tai, &emm_context->_tai_list);
+        if ( RETURNok == rc) {
+          emm_ctx_set_guti(emm_context, &guti);
+          emm_ctx_set_attribute_valid(emm_context, EMM_CTXT_MEMBER_TAI_LIST);
+          //----------------------------------------
+          REQUIREMENT_3GPP_24_301(R10_5_5_1_2_4__6);
+          REQUIREMENT_3GPP_24_301(R10_5_5_1_2_4__10);
+          memcpy(&emm_sap.u.emm_as.u.establish.tai_list, &emm_context->_tai_list, sizeof(tai_list_t));
+        } else {
+          OAILOG_FUNC_RETURN (LOG_NAS_EMM, RETURNerror);
+        }
+      }
 
-    if (!IS_EMM_CTXT_VALID_GUTI(emm_context) &&
-         IS_EMM_CTXT_PRESENT_GUTI(emm_context) &&
-         IS_EMM_CTXT_PRESENT_OLD_GUTI(emm_context)) {
-      /*
-       * Implicit GUTI reallocation;
-       * include the new assigned GUTI in the Attach Accept message
-       */
-      OAILOG_INFO (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " EMM-PROC  - Implicit GUTI reallocation, include the new assigned GUTI in the Attach Accept message\n",
-          ue_id);
-      emm_sap.u.emm_as.u.establish.new_guti    = &emm_context->_guti;
-    } else if (!IS_EMM_CTXT_VALID_GUTI(emm_context) &&
-        IS_EMM_CTXT_PRESENT_GUTI(emm_context)) {
-      /*
-       * include the new assigned GUTI in the Attach Accept message
-       */
-      OAILOG_INFO (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " EMM-PROC  - Include the new assigned GUTI in the Attach Accept message\n", ue_id);
-      emm_sap.u.emm_as.u.establish.new_guti    = &emm_context->_guti;
-    } else { // IS_EMM_CTXT_VALID_GUTI(ue_mm_context) is true
-      emm_sap.u.emm_as.u.establish.new_guti  = NULL;
-    }
-    //----------------------------------------
-    REQUIREMENT_3GPP_24_301(R10_5_5_1_2_4__14);
-    emm_sap.u.emm_as.u.establish.eps_network_feature_support = &_emm_data.conf.eps_network_feature_support;
+      emm_sap.u.emm_as.u.establish.eps_id.guti = &emm_context->_guti;
 
-    /*
-     * Setup EPS NAS security data
-     */
-    emm_as_set_security_data (&emm_sap.u.emm_as.u.establish.sctx, &emm_context->_security, false, true);
-    emm_sap.u.emm_as.u.establish.encryption = emm_context->_security.selected_algorithms.encryption;
-    emm_sap.u.emm_as.u.establish.integrity = emm_context->_security.selected_algorithms.integrity;
-    OAILOG_DEBUG (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " EMM-PROC  - encryption = 0x%X (0x%X)\n",
-        ue_id, emm_sap.u.emm_as.u.establish.encryption, emm_context->_security.selected_algorithms.encryption);
-    OAILOG_DEBUG (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " EMM-PROC  - integrity  = 0x%X (0x%X)\n",
-        ue_id, emm_sap.u.emm_as.u.establish.integrity, emm_context->_security.selected_algorithms.integrity);
-    /*
-     * Get the activate default EPS bearer context request message to
-     * transfer within the ESM container of the attach accept message
-     */
-    attach_data_t         *attach_data = &emm_context->specific_proc->arg.u.attach_data;
-    emm_sap.u.emm_as.u.establish.nas_msg = attach_data->esm_msg;
-    OAILOG_TRACE (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " EMM-PROC  - nas_msg  src size = %d nas_msg  dst size = %d \n",
-        ue_id, blength(attach_data->esm_msg), blength(emm_sap.u.emm_as.u.establish.nas_msg));
-
-    // Send T3402
-    emm_sap.u.emm_as.u.establish.t3402 = &mme_config.nas_config.t3402_min;
-
-    REQUIREMENT_3GPP_24_301(R10_5_5_1_2_4__2);
-    MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "0 EMMAS_ESTABLISH_CNF ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
-    rc = emm_sap_send (&emm_sap);
-
-    if (RETURNerror != rc) {
-      if (emm_context->T3450.id != NAS_TIMER_INACTIVE_ID) {
+      if (!IS_EMM_CTXT_VALID_GUTI(emm_context) &&
+           IS_EMM_CTXT_PRESENT_GUTI(emm_context) &&
+           IS_EMM_CTXT_PRESENT_OLD_GUTI(emm_context)) {
         /*
-         * Re-start T3450 timer
+         * Implicit GUTI reallocation;
+         * include the new assigned GUTI in the Attach Accept message
          */
-        emm_context->T3450.id = nas_timer_stop (emm_context->T3450.id);
-        MSC_LOG_EVENT (MSC_NAS_EMM_MME, "T3450 stopped UE " MME_UE_S1AP_ID_FMT "", ue_id);
+        OAILOG_INFO (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " EMM-PROC  - Implicit GUTI reallocation, include the new assigned GUTI in the Attach Accept message\n",
+            ue_id);
+        emm_sap.u.emm_as.u.establish.new_guti    = &emm_context->_guti;
+      } else if (!IS_EMM_CTXT_VALID_GUTI(emm_context) &&
+          IS_EMM_CTXT_PRESENT_GUTI(emm_context)) {
+        /*
+         * include the new assigned GUTI in the Attach Accept message
+         */
+        OAILOG_INFO (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " EMM-PROC  - Include the new assigned GUTI in the Attach Accept message\n", ue_id);
+        emm_sap.u.emm_as.u.establish.new_guti    = &emm_context->_guti;
+      } else { // IS_EMM_CTXT_VALID_GUTI(ue_mm_context) is true
+        emm_sap.u.emm_as.u.establish.new_guti  = NULL;
       }
-      /*
-       * Start T3450 timer
-       */
-      emm_context->T3450.id = nas_timer_start (emm_context->T3450.sec, 0 /*usec*/,_emm_attach_t3450_handler, emm_context);
-      MSC_LOG_EVENT (MSC_NAS_EMM_MME, "T3450 started UE " MME_UE_S1AP_ID_FMT " ", ue_id);
+      //----------------------------------------
+      REQUIREMENT_3GPP_24_301(R10_5_5_1_2_4__14);
+      emm_sap.u.emm_as.u.establish.eps_network_feature_support = &_emm_data.conf.eps_network_feature_support;
 
-      OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT "Timer T3450 (%lx) expires in %ld seconds\n",
-          ue_id, emm_context->T3450.id, emm_context->T3450.sec);
+      /*
+       * Setup EPS NAS security data
+       */
+      emm_as_set_security_data (&emm_sap.u.emm_as.u.establish.sctx, &emm_context->_security, false, true);
+      emm_sap.u.emm_as.u.establish.encryption = emm_context->_security.selected_algorithms.encryption;
+      emm_sap.u.emm_as.u.establish.integrity = emm_context->_security.selected_algorithms.integrity;
+      OAILOG_DEBUG (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " EMM-PROC  - encryption = 0x%X (0x%X)\n",
+          ue_id, emm_sap.u.emm_as.u.establish.encryption, emm_context->_security.selected_algorithms.encryption);
+      OAILOG_DEBUG (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " EMM-PROC  - integrity  = 0x%X (0x%X)\n",
+          ue_id, emm_sap.u.emm_as.u.establish.integrity, emm_context->_security.selected_algorithms.integrity);
+      /*
+       * Get the activate default EPS bearer context request message to
+       * transfer within the ESM container of the attach accept message
+       */
+      emm_sap.u.emm_as.u.establish.nas_msg = attach_proc->esm_msg_out;
+      OAILOG_TRACE (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT " EMM-PROC  - nas_msg  src size = %d nas_msg  dst size = %d \n",
+          ue_id, blength(attach_proc->esm_msg_out), blength(emm_sap.u.emm_as.u.establish.nas_msg));
+
+      // Send T3402
+      emm_sap.u.emm_as.u.establish.t3402 = &mme_config.nas_config.t3402_min;
+
+      REQUIREMENT_3GPP_24_301(R10_5_5_1_2_4__2);
+      MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "0 EMMAS_ESTABLISH_CNF ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
+      rc = emm_sap_send (&emm_sap);
+
+      if (RETURNerror != rc) {
+        void * callback_arg = NULL;
+        nas_stop_T3450(ue_id, &attach_proc->T3450, callback_arg);
+        /*
+         * Start T3450 timer
+         */
+        nas_start_T3450(attach_proc->ue_id, &attach_proc->T3450, attach_proc->emm_spec_proc.emm_proc.base_proc.time_out, (void*)emm_context);
+      }
     }
   } else {
     OAILOG_WARNING (LOG_NAS_EMM, "ue_mm_context NULL\n");
@@ -1522,116 +1428,55 @@ static int _emm_attach_accept (emm_context_t * emm_context)
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
 }
 
-/****************************************************************************
- **                                                                        **
- ** Name:    _emm_attach_have_changed()                                **
- **                                                                        **
- ** Description: Check whether the given attach parameters differs from    **
- **      those previously stored when the attach procedure has     **
- **      been initiated.                                           **
- **                                                                        **
- ** Inputs:  ctx:       EMM context of the UE in the network       **
- **      type:      Type of the requested attach               **
- **      ksi:       Security ket sey identifier                **
- **      guti:      The GUTI provided by the UE                **
- **      imsi:      The IMSI provided by the UE                **
- **      imei:      The IMEI provided by the UE                **
- **      eea:       Supported EPS encryption algorithms        **
- **      eia:       Supported EPS integrity algorithms         **
- **      Others:    None                                       **
- **                                                                        **
- ** Outputs:     None                                                      **
- **      Return:    true if at least one of the parameters     **
- **             differs; false otherwise.                  **
- **      Others:    None                                       **
- **                                                                        **
- ***************************************************************************/
-static int
-_emm_attach_have_changed (
-  const emm_context_t * emm_context,
-  emm_proc_attach_type_t type,
-  ksi_t ksi,
-  guti_t * guti,
-  imsi_t * imsi,
-  imei_t * imei,
-  const ue_network_capability_t * const ue_network_capability,
-  const ms_network_capability_t * const ms_network_capability)
+/*
+ * Description: Check whether the given attach parameters differs from
+ *      those previously stored when the attach procedure has
+ *      been initiated.
+ *
+ * Outputs:     None
+ *      Return:    true if at least one of the parameters
+ *             differs; false otherwise.
+ *      Others:    None
+ *
+ */
+static bool _emm_attach_ies_have_changed (mme_ue_s1ap_id_t ue_id, emm_attach_request_ies_t * const ies1, emm_attach_request_ies_t * const ies2)
 {
   OAILOG_FUNC_IN (LOG_NAS_EMM);
-  mme_ue_s1ap_id_t                        ue_id = PARENT_STRUCT(emm_context, struct ue_mm_context_s, emm_context)->mme_ue_s1ap_id;
 
-  /*
-   * Emergency bearer services indicator
-   */
-  if ((type == EMM_ATTACH_TYPE_EMERGENCY) != emm_context->is_emergency) {
-    OAILOG_DEBUG (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT "  attach changed: type EMM_ATTACH_TYPE_EMERGENCY \n", ue_id);
+  if (ies1->type != ies2->type) {
+    OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT" Attach IEs changed: type EMM_ATTACH_TYPE\n", ue_id);
     OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
   }
-
-  /*
-   * Security key set identifier
-   */
-  if (ksi != emm_context->ue_ksi) {
-    OAILOG_DEBUG (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT "  attach changed: ue_ksi %d -> %d \n", ue_id, emm_context->ue_ksi, ksi);
+  if (ies1->is_native_sc != ies2->is_native_sc) {
+    OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT" Attach IEs changed: Is native securitty context\n", ue_id);
     OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
   }
-
-  /*
-   * Supported EPS encryption algorithms
-   */
-  if (memcmp(ue_network_capability, &emm_context->_ue_network_capability, sizeof(emm_context->_ue_network_capability))) {
-    OAILOG_DEBUG (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT "  attach changed: UE network capabilities \n", ue_id);
+  if (ies1->ksi != ies2->ksi) {
+    OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT" Attach IEs changed: KSI %d -> %d \n", ue_id, ies1->ksi, ies2->ksi);
     OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
   }
-
-  // optional IE
-  if (ms_network_capability) {
-    if (IS_EMM_CTXT_PRESENT_MS_NETWORK_CAPABILITY(emm_context)) {
-      if (memcmp(ms_network_capability, &emm_context->_ms_network_capability, sizeof(emm_context->_ms_network_capability))) {
-        OAILOG_DEBUG (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT "  attach changed: MS network capabilities \n", ue_id);
-        OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
-      }
-    } else {
-      OAILOG_DEBUG (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT "  attach changed: MS network capabilities \n", ue_id);
-      OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
-    }
-  } else {
-    if (IS_EMM_CTXT_PRESENT_MS_NETWORK_CAPABILITY(emm_context)) {
-      OAILOG_DEBUG (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT "  attach changed: MS network capabilities \n", ue_id);
-      OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
-    }
-  }
-
 
   /*
    * The GUTI if provided by the UE
    */
-  if ((guti) && (!IS_EMM_CTXT_PRESENT_OLD_GUTI(emm_context))) {
-    OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT "  attach changed:  guti None ->  " GUTI_FMT "\n", ue_id, GUTI_ARG(guti));
+  if (ies1->is_native_guti != ies2->is_native_guti) {
+    OAILOG_DEBUG (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT" Attach IEs changed: Native GUTI %d -> %d \n", ue_id, ies1->is_native_guti, ies2->is_native_guti);
+    OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
+  }
+  if ((ies1->guti) && (!ies2->guti)) {
+    OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT" Attach IEs changed:  GUTI " GUTI_FMT " -> None\n", ue_id, GUTI_ARG(ies1->guti));
     OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
   }
 
-  if ((!guti) && (IS_EMM_CTXT_PRESENT_GUTI(emm_context))) {
-    OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT "  attach changed:  guti " GUTI_FMT " -> None\n", ue_id, GUTI_ARG(&emm_context->_guti));
+  if ((!ies1->guti) && (ies2->guti)) {
+    OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT" Attach IEs changed:  GUTI None ->  " GUTI_FMT "\n", ue_id, GUTI_ARG(ies2->guti));
     OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
   }
 
-  if ((guti) && (IS_EMM_CTXT_PRESENT_GUTI(emm_context))) {
-    if (guti->m_tmsi != emm_context->_guti.m_tmsi) {
-      OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT "  attach changed:  guti/tmsi " GUTI_FMT " -> " GUTI_FMT "\n",
-          ue_id, GUTI_ARG(&emm_context->_guti), GUTI_ARG(guti));
-      OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
-    }
-    if ((guti->gummei.mme_code != emm_context->_guti.gummei.mme_code) ||
-        (guti->gummei.mme_gid != emm_context->_guti.gummei.mme_gid) ||
-        (guti->gummei.plmn.mcc_digit1 != emm_context->_guti.gummei.plmn.mcc_digit1) ||
-        (guti->gummei.plmn.mcc_digit2 != emm_context->_guti.gummei.plmn.mcc_digit2) ||
-        (guti->gummei.plmn.mcc_digit3 != emm_context->_guti.gummei.plmn.mcc_digit3) ||
-        (guti->gummei.plmn.mnc_digit1 != emm_context->_guti.gummei.plmn.mnc_digit1) ||
-        (guti->gummei.plmn.mnc_digit2 != emm_context->_guti.gummei.plmn.mnc_digit2) ||
-        (guti->gummei.plmn.mnc_digit3 != emm_context->_guti.gummei.plmn.mnc_digit3)) {
-      OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT "  attach changed:  guti/tmsi " GUTI_FMT " -> " GUTI_FMT "\n",
-          ue_id, GUTI_ARG(&emm_context->_guti), GUTI_ARG(guti));
+  if ((ies1->guti) && (ies2->guti)) {
+    if (memcmp(ies1->guti, ies2->guti, sizeof(*ies1->guti))) {
+      OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT" Attach IEs changed:  guti/tmsi " GUTI_FMT " -> " GUTI_FMT "\n", ue_id,
+          GUTI_ARG(ies1->guti), GUTI_ARG(ies2->guti));
       OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
     }
   }
@@ -1639,67 +1484,184 @@ _emm_attach_have_changed (
   /*
    * The IMSI if provided by the UE
    */
-  if ((imsi) && (!IS_EMM_CTXT_VALID_IMSI(emm_context))) {
-    char                                    imsi_str[16];
-
-    IMSI_TO_STRING (imsi, imsi_str, 16);
-    OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  _emm_attach_have_changed: imsi %s/NULL (ctxt)\n", imsi_str);
+  if ((ies1->imsi) && (!ies2->imsi)) {
+    imsi64_t imsi641  = imsi_to_imsi64(ies1->imsi);
+    OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT" Attach IEs changed:  IMSI " IMSI_64_FMT " -> None\n", ue_id, imsi641);
     OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
   }
 
-  /* Bad test
-  if ((!imsi) && (IS_EMM_CTXT_VALID_IMSI(emm_context))) {
-    char                                    imsi_str[16];
-
-    IMSI_TO_STRING (&emm_context->_imsi, imsi_str, 16);
-    OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  _emm_attach_have_changed: imsi NULL/%s (ctxt)\n", imsi_str);
+  if ((!ies1->imsi) && (ies2->imsi)) {
+    imsi64_t imsi642  = imsi_to_imsi64(ies2->imsi);
+    OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT" Attach IEs changed:  IMSI None ->  " IMSI_64_FMT "\n", ue_id, imsi642);
     OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
-  } */
+  }
 
-  if ((imsi) && (IS_EMM_CTXT_VALID_IMSI(emm_context))) {
-    if (memcmp (imsi, &emm_context->_imsi, sizeof (emm_context->_imsi)) != 0) {
-      char                                    imsi_str[16];
-      char                                    imsi2_str[16];
+  if ((ies1->guti) && (ies2->guti)) {
+    imsi64_t imsi641  = imsi_to_imsi64(ies1->imsi);
+    imsi64_t imsi642  = imsi_to_imsi64(ies2->imsi);
+    if (memcmp(ies1->guti, ies2->guti, sizeof(*ies1->guti))) {
+      OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT" Attach IEs changed:  IMSI " IMSI_64_FMT " -> " IMSI_64_FMT "\n", ue_id,imsi641, imsi642);
+      OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
+    }
+  }
 
-      IMSI_TO_STRING (imsi, imsi_str, 16);
-      IMSI_TO_STRING (&emm_context->_imsi, imsi2_str, 16);
-      OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  _emm_attach_have_changed: imsi %s/%s (ctxt)\n", imsi_str, imsi2_str);
+
+  /*
+   * The IMEI if provided by the UE
+   */
+  if ((ies1->imei) && (!ies2->imei)) {
+    char                                    imei_str[16];
+
+    IMEI_TO_STRING (ies1->imei, imei_str, 16);
+    OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT" Attach IEs changed: imei %s/NULL (ctxt)\n", ue_id, imei_str);
+    OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
+  }
+
+  if ((!ies1->imei) && (ies2->imei)) {
+    char                                    imei_str[16];
+
+    IMEI_TO_STRING (ies2->imei, imei_str, 16);
+    OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT" Attach IEs changed: imei NULL/%s (ctxt)\n", ue_id, imei_str);
+    OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
+  }
+
+  if ((ies1->imei) && (ies2->imei)) {
+    if (memcmp (ies1->imei, ies2->imei, sizeof (*ies2->imei)) != 0) {
+      char                                    imei_str[16];
+      char                                    imei2_str[16];
+
+      IMEI_TO_STRING (ies1->imei, imei_str, 16);
+      IMEI_TO_STRING (ies2->imei, imei2_str, 16);
+      OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT" Attach IEs changed: imei %s/%s (ctxt)\n", ue_id, imei_str, imei2_str);
       OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
     }
   }
 
   /*
-   * The IMEI if provided by the UE
+   * The Last visited registered TAI if provided by the UE
    */
-  if ((imei) && (!IS_EMM_CTXT_VALID_IMEI(emm_context))) {
-    char                                    imei_str[16];
-
-    IMEI_TO_STRING (imei, imei_str, 16);
-    OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  _emm_attach_have_changed: imei %s/NULL (ctxt)\n", imei_str);
+  if ((ies1->last_visited_registered_tai) && (!ies2->last_visited_registered_tai)) {
+    OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT" Attach IEs changed: LVR TAI " TAI_FMT "/NULL\n", ue_id, TAI_ARG(ies1->last_visited_registered_tai));
     OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
   }
 
-  if ((!imei) && (IS_EMM_CTXT_VALID_IMEI(emm_context))) {
-    char                                    imei_str[16];
-
-    IMEI_TO_STRING (&emm_context->_imei, imei_str, 16);
-    OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  _emm_attach_have_changed: imei NULL/%s (ctxt)\n", imei_str);
+  if ((!ies1->last_visited_registered_tai) && (ies2->last_visited_registered_tai)) {
+    OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT" Attach IEs changed: LVR TAI NULL/" TAI_FMT "\n", ue_id, TAI_ARG(ies2->last_visited_registered_tai));
     OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
   }
 
-  if ((imei) && (IS_EMM_CTXT_VALID_IMEI(emm_context))) {
-    if (memcmp (imei, &emm_context->_imei, sizeof (emm_context->_imei)) != 0) {
-      char                                    imei_str[16];
-      char                                    imei2_str[16];
-
-      IMEI_TO_STRING (imei, imei_str, 16);
-      IMEI_TO_STRING (&emm_context->_imei, imei2_str, 16);
-      OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  _emm_attach_have_changed: imei %s/%s (ctxt)\n", imei_str, imei2_str);
+  if ((ies1->last_visited_registered_tai) && (ies2->last_visited_registered_tai)) {
+    if (memcmp (ies1->last_visited_registered_tai, ies2->last_visited_registered_tai, sizeof (*ies2->last_visited_registered_tai)) != 0) {
+      OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT" Attach IEs changed: LVR TAI " TAI_FMT "/" TAI_FMT "\n", ue_id,
+          TAI_ARG(ies1->last_visited_registered_tai), TAI_ARG(ies2->last_visited_registered_tai));
       OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
     }
   }
 
+  /*
+   * Originating TAI
+   */
+  if ((ies1->originating_tai) && (!ies2->originating_tai)) {
+    OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT" Attach IEs changed: orig TAI " TAI_FMT "/NULL\n", ue_id, TAI_ARG(ies1->originating_tai));
+    OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
+  }
+
+  if ((!ies1->originating_tai) && (ies2->originating_tai)) {
+    OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT" Attach IEs changed: orig TAI NULL/" TAI_FMT "\n", ue_id, TAI_ARG(ies2->originating_tai));
+    OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
+  }
+
+  if ((ies1->originating_tai) && (ies2->originating_tai)) {
+    if (memcmp (ies1->originating_tai, ies2->originating_tai, sizeof (*ies2->originating_tai)) != 0) {
+      OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT" Attach IEs changed: orig TAI " TAI_FMT "/" TAI_FMT "\n", ue_id,
+          TAI_ARG(ies1->originating_tai), TAI_ARG(ies2->originating_tai));
+      OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
+    }
+  }
+
+  /*
+   * Originating ECGI
+   */
+  if ((ies1->originating_ecgi) && (!ies2->originating_ecgi)) {
+    OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT" Attach IEs changed: orig ECGI\n", ue_id);
+    OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
+  }
+
+  if ((!ies1->originating_ecgi) && (ies2->originating_ecgi)) {
+    OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT" Attach IEs changed: orig ECGI\n", ue_id);
+    OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
+  }
+
+  if ((ies1->originating_ecgi) && (ies2->originating_ecgi)) {
+    if (memcmp (ies1->originating_ecgi, ies2->originating_ecgi, sizeof (*ies2->originating_ecgi)) != 0) {
+      OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT" Attach IEs changed: orig ECGI\n", ue_id);
+      OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
+    }
+  }
+
+  /*
+   * UE network capability
+   */
+  if (memcmp(&ies1->ue_network_capability, &ies2->ue_network_capability, sizeof(ies1->ue_network_capability))) {
+    OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT" Attach IEs changed: UE network capability\n", ue_id);
+    OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
+  }
+
+  /*
+   * MS network capability
+   */
+  if ((ies1->ms_network_capability) && (!ies2->ms_network_capability)) {
+    OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT" Attach IEs changed: MS network capability\n", ue_id);
+    OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
+  }
+
+  if ((!ies1->ms_network_capability) && (ies2->ms_network_capability)) {
+    OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT" Attach IEs changed: MS network capability\n", ue_id);
+    OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
+  }
+
+  if ((ies1->ms_network_capability) && (ies2->ms_network_capability)) {
+    if (memcmp (ies1->ms_network_capability, ies2->ms_network_capability, sizeof (*ies2->ms_network_capability)) != 0) {
+      OAILOG_INFO (LOG_NAS_EMM, "UE " MME_UE_S1AP_ID_FMT" Attach IEs changed: MS network capability\n", ue_id);
+      OAILOG_FUNC_RETURN (LOG_NAS_EMM, true);
+    }
+  }
+  // TODO ESM MSG ?
+
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, false);
+}
+
+//------------------------------------------------------------------------------
+void free_emm_attach_request_ies(emm_attach_request_ies_t ** const ies)
+{
+  if ((*ies)->guti) {
+    free_wrapper((void**)&(*ies)->guti);
+  }
+  if ((*ies)->imsi) {
+    free_wrapper((void**)&(*ies)->imsi);
+  }
+  if ((*ies)->imei) {
+    free_wrapper((void**)&(*ies)->imei);
+  }
+  if ((*ies)->last_visited_registered_tai) {
+    free_wrapper((void**)&(*ies)->last_visited_registered_tai);
+  }
+  if ((*ies)->originating_tai) {
+    free_wrapper((void**)&(*ies)->originating_tai);
+  }
+  if ((*ies)->originating_ecgi) {
+    free_wrapper((void**)&(*ies)->originating_ecgi);
+  }
+  if ((*ies)->ms_network_capability) {
+    free_wrapper((void**)&(*ies)->ms_network_capability);
+  }
+  if ((*ies)->esm_msg) {
+    bdestroy_wrapper(&(*ies)->esm_msg);
+  }
+  if ((*ies)->drx_parameter) {
+    free_wrapper((void**)&(*ies)->drx_parameter);
+  }
+  free_wrapper((void**)ies);
 }
 
 /****************************************************************************
@@ -1727,65 +1689,45 @@ _emm_attach_have_changed (
  **      Others:    None                                       **
  **                                                                        **
  ***************************************************************************/
-static int
-_emm_attach_update (
-  emm_context_t * emm_context,
-  mme_ue_s1ap_id_t ue_id,
-  emm_proc_attach_type_t type,
-  ksi_t ksi,
-  bool is_native_guti,
-  guti_t * guti,
-  imsi_t * imsi,
-  imei_t * imei,
-  const tai_t   * const originating_tai,
-  const ue_network_capability_t * const ue_network_capability,
-  const ms_network_capability_t * const ms_network_capability,
-  const_bstring esm_msg_pP)
+static int _emm_attach_update (emm_context_t * const emm_context, emm_attach_request_ies_t * const ies)
 {
 
   OAILOG_FUNC_IN (LOG_NAS_EMM);
   ue_mm_context_t *ue_mm_context = PARENT_STRUCT(emm_context, struct ue_mm_context_s, emm_context);
-  /*
-   * UE identifier
-   */
-  if ((INVALID_MME_UE_S1AP_ID == ue_mm_context->mme_ue_s1ap_id) && (ue_mm_context->mme_ue_s1ap_id != ue_id)) {
-    mme_api_notified_new_ue_s1ap_id_association (ue_mm_context->enb_ue_s1ap_id, ue_mm_context->e_utran_cgi.cell_identity.enb_id, ue_id);
-  }
-  ue_mm_context->mme_ue_s1ap_id = ue_id;
+
 
   /*
    * Emergency bearer services indicator
    */
-  emm_context->is_emergency = (type == EMM_ATTACH_TYPE_EMERGENCY);
+  emm_context->is_emergency = (ies->type == EMM_ATTACH_TYPE_EMERGENCY);
   /*
    * Security key set identifier
    */
-  if (emm_context->ue_ksi != ksi) {
-    OAILOG_TRACE (LOG_NAS_EMM, "UE id " MME_UE_S1AP_ID_FMT " Update ue ksi %d -> %d\n", ue_mm_context->mme_ue_s1ap_id, emm_context->ue_ksi, ksi);
-    emm_context->ue_ksi = ksi;
+  if (emm_context->ksi != ies->ksi) {
+    OAILOG_TRACE (LOG_NAS_EMM, "UE id " MME_UE_S1AP_ID_FMT " Update ue ksi %d -> %d\n", ue_mm_context->mme_ue_s1ap_id, emm_context->ksi, ies->ksi);
+    emm_context->ksi = ies->ksi;
   }
   /*
    * Supported EPS encryption algorithms
    */
-  if (ue_network_capability) {
-    emm_ctx_set_valid_ue_nw_cap(emm_context, ue_network_capability);
-  }
-  if (ms_network_capability) {
-    emm_ctx_set_valid_ms_nw_cap(emm_context, ms_network_capability);
+  emm_ctx_set_valid_ue_nw_cap(emm_context, &ies->ue_network_capability);
+
+  if (ies->ms_network_capability) {
+    emm_ctx_set_valid_ms_nw_cap(emm_context, ies->ms_network_capability);
   } else {
     // optional IE
     emm_ctx_clear_ms_nw_cap(emm_context);
   }
 
-  emm_context->originating_tai = *originating_tai;
+  emm_context->originating_tai = *ies->originating_tai;
 
   /*
    * The GUTI if provided by the UE
    */
-  if (guti) {
-    if (memcmp(guti, &emm_context->_old_guti, sizeof(emm_context->_old_guti))) {
+  if (ies->guti) {
+    if (memcmp(ies->guti, &emm_context->_old_guti, sizeof(emm_context->_old_guti))) {
       //TODO remove previous guti entry in coll if was present
-      emm_ctx_set_old_guti(emm_context, guti);
+      emm_ctx_set_old_guti(emm_context, ies->guti);
       // emm_context_add_old_guti (&_emm_data, ctx); changed into ->
       mme_ue_context_update_coll_keys (&mme_app_desc.mme_ue_contexts, ue_mm_context ,
         ue_mm_context->enb_s1ap_id_key,
@@ -1798,10 +1740,10 @@ _emm_attach_update (
   /*
    * The IMSI if provided by the UE
    */
-  if (imsi) {
-    imsi64_t new_imsi64 = imsi_to_imsi64(imsi);
+  if (ies->imsi) {
+    imsi64_t new_imsi64 = imsi_to_imsi64(ies->imsi);
     if (new_imsi64 != emm_context->_imsi64) {
-      emm_ctx_set_valid_imsi(emm_context, imsi, new_imsi64);
+      emm_ctx_set_valid_imsi(emm_context, ies->imsi, new_imsi64);
 
       //emm_context_add_imsi (&_emm_data, ctx); changed into ->
       mme_ue_context_update_coll_keys (&mme_app_desc.mme_ue_contexts, ue_mm_context ,
@@ -1815,22 +1757,9 @@ _emm_attach_update (
   /*
    * The IMEI if provided by the UE
    */
-  if (imei) {
-    emm_ctx_set_valid_imei(emm_context, imei);
+  if (ies->imei) {
+    emm_ctx_set_valid_imei(emm_context, ies->imei);
   }
 
-  /*
-   * The ESM message contained within the attach request
-   */
-  if (esm_msg_pP) {
-    bdestroy_wrapper (&emm_context->esm_msg);
-    if (!(emm_context->esm_msg = bstrcpy(esm_msg_pP))) {
-      OAILOG_FUNC_RETURN (LOG_NAS_EMM, RETURNerror);
-    }
-  }
-  /*
-   * Attachment indicator
-   */
-  emm_context->is_attached = false;
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, RETURNok);
 }

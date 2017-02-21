@@ -142,16 +142,11 @@ int esm_proc_esm_information_response (emm_context_t * ue_context, pti_t pti, co
 {
   OAILOG_FUNC_IN (LOG_NAS_ESM);
   int                                     rc = RETURNok;
-  mme_ue_s1ap_id_t      ue_id = PARENT_STRUCT(ue_context, struct ue_mm_context_s, emm_context)->mme_ue_s1ap_id;
 
   /*
    * Stop T3489 timer if running
    */
-  if (ue_context->esm_ctx.T3489.id != NAS_TIMER_INACTIVE_ID) {
-    OAILOG_INFO (LOG_NAS_ESM, "ESM-PROC  - Stop timer T3489 (%lx) UE " MME_UE_S1AP_ID_FMT "\n", ue_context->esm_ctx.T3489.id, ue_id);
-    ue_context->esm_ctx.T3489.id = nas_timer_stop (ue_context->esm_ctx.T3489.id);
-    MSC_LOG_EVENT (MSC_NAS_ESM_MME, "T3489 stopped UE " MME_UE_S1AP_ID_FMT " ", ue_id);
-  }
+  nas_stop_T3489(&ue_context->esm_ctx);
 
   if (apn) {
     if (ue_context->esm_ctx.esm_proc_data->apn) {
@@ -208,44 +203,40 @@ int esm_proc_esm_information_response (emm_context_t * ue_context, pti_t pti, co
 static void *_esm_information_t3489_handler (void *args)
 {
   OAILOG_FUNC_IN (LOG_NAS_ESM);
-  int                                     rc = RETURNok;
 
   /*
    * Get retransmission timer parameters data
    */
-  esm_ebr_timer_data_t                   *data = (esm_ebr_timer_data_t *) (args);
+  esm_ebr_timer_data_t                   *esm_ebr_timer_data = (esm_ebr_timer_data_t *) (args);
 
-  /*
-   * Increment the retransmission counter
-   */
-  data->count += 1;
-  OAILOG_WARNING (LOG_NAS_ESM, "ESM-PROC  - T3489 timer expired (ue_id=" MME_UE_S1AP_ID_FMT "), " "retransmission counter = %d\n",
-      data->ue_id, data->count);
+  if (esm_ebr_timer_data) {
+    /*
+     * Increment the retransmission counter
+     */
+    esm_ebr_timer_data->count += 1;
+    OAILOG_WARNING (LOG_NAS_ESM, "ESM-PROC  - T3489 timer expired (ue_id=" MME_UE_S1AP_ID_FMT "), " "retransmission counter = %d\n",
+        esm_ebr_timer_data->ue_id, esm_ebr_timer_data->count);
 
-  if (data->count < ESM_INFORMATION_COUNTER_MAX) {
-    /*
-     * Re-send deactivate EPS bearer context request message to the UE
-     */
-    rc = _esm_information (data->ctx, data->ebi, data);
-  } else {
-    /*
-     * The maximum number of deactivate EPS bearer context request
-     * message retransmission has exceed
-     */
-    // TODO call something like _emm_cn_pdn_connectivity_fail (emm_cn_pdn_fail) #ESM information not received
-    if (rc != RETURNerror) {
+    if (esm_ebr_timer_data->count < ESM_INFORMATION_COUNTER_MAX) {
+      /*
+       * Re-send deactivate EPS bearer context request message to the UE
+       */
+      _esm_information (esm_ebr_timer_data->ctx, esm_ebr_timer_data->ebi, esm_ebr_timer_data);
+    } else {
+      /*
+       * The maximum number of deactivate EPS bearer context request
+       * message retransmission has exceed
+       */
+      // TODO call something like _emm_cn_pdn_connectivity_fail (emm_cn_pdn_fail) #ESM information not received
       /*
        * Stop timer T3489
        */
-      if (data->ctx->esm_ctx.T3489.id != NAS_TIMER_INACTIVE_ID) {
-        /*
-         * Re-start T3489 timer
-         */
-        data->ctx->esm_ctx.T3489.id = nas_timer_stop (data->ctx->esm_ctx.T3489.id);
-        MSC_LOG_EVENT (MSC_NAS_EMM_MME, "T3489 stopped UE " MME_UE_S1AP_ID_FMT "", data->ue_id);
-      }
-      bdestroy_wrapper(&data->msg);
-      free_wrapper((void**)data);
+      esm_ebr_timer_data->ctx->esm_ctx.T3489.id = NAS_TIMER_INACTIVE_ID;
+      /*
+       * Re-start T3489 timer
+       */
+      bdestroy_wrapper(&esm_ebr_timer_data->msg);
+      free_wrapper((void**)esm_ebr_timer_data);
     }
   }
 
@@ -301,13 +292,7 @@ _esm_information (
   rc = emm_sap_send (&emm_sap);
 
   if (rc != RETURNerror) {
-    if (ue_context->esm_ctx.T3489.id != NAS_TIMER_INACTIVE_ID) {
-      /*
-       * Re-start T3489 timer
-       */
-      ue_context->esm_ctx.T3489.id = nas_timer_stop (ue_context->esm_ctx.T3489.id);
-      MSC_LOG_EVENT (MSC_NAS_EMM_MME, "T3489 stopped UE " MME_UE_S1AP_ID_FMT "", ue_id);
-    }
+    nas_stop_T3489(&ue_context->esm_ctx);
     /*
      * Start T3489 timer
      */

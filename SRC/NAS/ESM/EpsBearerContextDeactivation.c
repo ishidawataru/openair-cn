@@ -376,41 +376,47 @@ _eps_bearer_deactivate_t3495_handler (
   /*
    * Get retransmission timer parameters data
    */
-  esm_ebr_timer_data_t                   *data = (esm_ebr_timer_data_t *) (args);
+  esm_ebr_timer_data_t                   *esm_ebr_timer_data = (esm_ebr_timer_data_t *) (args);
 
-  /*
-   * Increment the retransmission counter
-   */
-  data->count += 1;
-  OAILOG_WARNING (LOG_NAS_ESM, "ESM-PROC  - T3495 timer expired (ue_id=" MME_UE_S1AP_ID_FMT ", ebi=%d), " "retransmission counter = %d\n",
-      data->ue_id, data->ebi, data->count);
-
-  if (data->count < EPS_BEARER_DEACTIVATE_COUNTER_MAX) {
+  if (esm_ebr_timer_data) {
     /*
-     * Re-send deactivate EPS bearer context request message to the UE
+     * Increment the retransmission counter
      */
-    bstring b = bstrcpy(data->msg);
-    rc = _eps_bearer_deactivate (data->ctx, data->ebi, &b);
-  } else {
-    /*
-     * The maximum number of deactivate EPS bearer context request
-     * message retransmission has exceed
-     */
-    pdn_cid_t                               pid = MAX_APN_PER_UE;
-    int                                     bid = BEARERS_PER_UE;
+    esm_ebr_timer_data->count += 1;
+    OAILOG_WARNING (LOG_NAS_ESM, "ESM-PROC  - T3495 timer expired (ue_id=" MME_UE_S1AP_ID_FMT ", ebi=%d), " "retransmission counter = %d\n",
+        esm_ebr_timer_data->ue_id, esm_ebr_timer_data->ebi, esm_ebr_timer_data->count);
 
-    /*
-     * Deactivate the EPS bearer context locally without peer-to-peer
-     * * * * signalling between the UE and the MME
-     */
-    rc = _eps_bearer_release (data->ctx, data->ebi, &pid, &bid);
-
-    if (rc != RETURNerror) {
+    if (esm_ebr_timer_data->count < EPS_BEARER_DEACTIVATE_COUNTER_MAX) {
       /*
-       * Stop timer T3495
+       * Re-send deactivate EPS bearer context request message to the UE
        */
-      rc = esm_ebr_stop_timer (data->ctx, data->ebi);
+      bstring b = bstrcpy(esm_ebr_timer_data->msg);
+      rc = _eps_bearer_deactivate (esm_ebr_timer_data->ctx, esm_ebr_timer_data->ebi, &b);
+    } else {
+      /*
+       * The maximum number of deactivate EPS bearer context request
+       * message retransmission has exceed
+       */
+      pdn_cid_t                               pid = MAX_APN_PER_UE;
+      int                                     bid = BEARERS_PER_UE;
+
+      /*
+       * Deactivate the EPS bearer context locally without peer-to-peer
+       * * * * signalling between the UE and the MME
+       */
+      rc = _eps_bearer_release (esm_ebr_timer_data->ctx, esm_ebr_timer_data->ebi, &pid, &bid);
+
+      if (rc != RETURNerror) {
+        /*
+         * Stop timer T3495
+         */
+        rc = esm_ebr_stop_timer (esm_ebr_timer_data->ctx, esm_ebr_timer_data->ebi);
+      }
     }
+    if (esm_ebr_timer_data->msg) {
+      bdestroy_wrapper (&esm_ebr_timer_data->msg);
+    }
+    free_wrapper ((void**)&esm_ebr_timer_data);
   }
 
   OAILOG_FUNC_RETURN (LOG_NAS_ESM, NULL);

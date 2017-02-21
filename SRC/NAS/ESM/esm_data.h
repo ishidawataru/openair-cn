@@ -98,7 +98,6 @@ typedef struct esm_ebr_context_s {
   traffic_flow_template_t          *tft;
   protocol_configuration_options_t *pco;
   struct nas_timer_s                timer;   /* Retransmission timer         */
-  esm_ebr_timer_data_t             *args; /* Retransmission timer parameters data */
 } esm_ebr_context_t;
 
 typedef struct esm_ebr_data_s {
@@ -205,6 +204,7 @@ typedef struct esm_data_s {
 
 void free_esm_bearer_context(esm_ebr_context_t * esm_ebr_context);
 void esm_bearer_context_init(esm_ebr_context_t * esm_ebr_context);
+void nas_stop_T3489(esm_context_t * const esm_ctx);
 void free_esm_context_content(esm_context_t * esm_ctx);
 void esm_init_context(struct esm_context_s *esm_ctx);
 

@@ -30,7 +30,7 @@
 
   Subsystem   EPS Mobility Management
 
-  Author      Frederic Maurel
+  Author      Frederic Maurel, Lionel GAUTHIER
 
   Description Defines the identification EMM procedure executed by the
         Non-Access Stratum.
@@ -82,29 +82,14 @@ static const char                      *_emm_identity_type_str[] = {
 };
 
 
-/*
-   --------------------------------------------------------------------------
-    Internal data handled by the identification procedure in the MME
-   --------------------------------------------------------------------------
-*/
-/*
-   Timer handlers
-*/
-static void *_identification_t3470_handler (void *);
+// callbacks for identification procedure
+static void _identification_t3470_handler (void *args);
+static int _identification_ll_failure (struct emm_context_s *emm_context, struct nas_emm_proc_s * emm_proc);
+static int _identification_non_delivered_ho (struct emm_context_s *emm_context, struct nas_emm_proc_s * emm_proc);
+static int _identification_abort (struct emm_context_s *emm_context, struct nas_base_proc_s* base_proc);
 
 
-static int _identification_ll_failure (struct emm_context_s *emm_context);
-static int _identification_non_delivered_ho (struct emm_context_s *emm_context);
-
-/*
-   Function executed whenever the ongoing EMM procedure that initiated
-   the identification procedure is aborted or the maximum value of the
-   retransmission timer counter is exceed
-*/
-static int _identification_abort (struct emm_context_s *emm_context);
-
-
-static int _identification_request (identification_data_t * data);
+static int _identification_request (nas_emm_ident_proc_t * const proc);
 
 /****************************************************************************/
 /******************  E X P O R T E D    F U N C T I O N S  ******************/
@@ -147,75 +132,58 @@ static int _identification_request (identification_data_t * data);
  ********************************************************************/
 int
 emm_proc_identification (
-  struct emm_context_s *emm_context,
-  emm_proc_identity_type_t type,
-  emm_common_success_callback_t success,
-  emm_common_reject_callback_t reject,
-  emm_common_failure_callback_t failure)
+  struct emm_context_s     * const emm_context,
+  nas_emm_proc_t           * const emm_proc,
+  const identity_type2_t           type,
+  success_cb_t success,
+  failure_cb_t failure)
 {
   OAILOG_FUNC_IN (LOG_NAS_EMM);
   int                                     rc = RETURNerror;
 
-  if (emm_context) {
+  if ((emm_context) && ((EMM_DEREGISTERED == emm_context->_emm_fsm_state) || (EMM_REGISTERED == emm_context->_emm_fsm_state))){
 
     REQUIREMENT_3GPP_24_301(R10_5_4_4_1);
     mme_ue_s1ap_id_t                        ue_id = PARENT_STRUCT(emm_context, struct ue_mm_context_s, emm_context)->mme_ue_s1ap_id;
 
     OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Initiate identification type = %s (%d), ctx = %p\n", _emm_identity_type_str[type], type, emm_context);
-    /*
-     * Allocate parameters of the retransmission timer callback
-     */
-    if (emm_context->common_proc) {
-      emm_common_cleanup(&emm_context->common_proc);
+
+    nas_emm_ident_proc_t * ident_proc = nas_new_identification_procedure(emm_context);
+    if (ident_proc) {
+      if (emm_proc) {
+        if ((NAS_EMM_PROC_TYPE_SPECIFIC == emm_proc->type) && (EMM_SPEC_PROC_TYPE_ATTACH == ((nas_emm_specific_proc_t*)emm_proc)->type)) {
+          ident_proc->is_cause_is_attach = true;
+        }
+      }
+      ident_proc->identity_type                                 = type;
+      ident_proc->retransmission_count                          = 0;
+      ident_proc->ue_id                                         = ue_id;
+      ((nas_base_proc_t *)ident_proc)->parent                   = (nas_base_proc_t*)emm_proc;
+      ident_proc->emm_com_proc.emm_proc.delivered               = NULL;
+      ident_proc->emm_com_proc.emm_proc.previous_emm_fsm_state  = emm_context->_emm_fsm_state;
+      ident_proc->emm_com_proc.emm_proc.not_delivered           = _identification_ll_failure;
+      ident_proc->emm_com_proc.emm_proc.not_delivered_ho        = _identification_non_delivered_ho;
+      ident_proc->emm_com_proc.emm_proc.base_proc.success_notif = success;
+      ident_proc->emm_com_proc.emm_proc.base_proc.failure_notif = failure;
+      ident_proc->emm_com_proc.emm_proc.base_proc.abort         = _identification_abort;
+      ident_proc->emm_com_proc.emm_proc.base_proc.fail_in       = NULL; // only response
+      ident_proc->emm_com_proc.emm_proc.base_proc.time_out      = _identification_t3470_handler;
     }
-    emm_context->common_proc = (emm_common_data_t *) calloc (1, sizeof (*emm_context->common_proc));
 
-    if (emm_context->common_proc) {
-      /*
-       * Setup ongoing EMM procedure callback functions
-       */
-      rc = emm_proc_common_initialize (emm_context, EMM_COMMON_PROC_TYPE_IDENTIFICATION, emm_context->common_proc,
-          success, reject, failure, _identification_ll_failure, _identification_non_delivered_ho, _identification_abort);
 
-      if (rc != RETURNok) {
-        OAILOG_WARNING (LOG_NAS_EMM, "Failed to initialize EMM callback functions\n");
-        free_wrapper ((void**)&emm_context->common_proc);
-        OAILOG_FUNC_RETURN (LOG_NAS_EMM, RETURNerror);
-      }
+    rc = _identification_request (ident_proc);
 
+    if (rc != RETURNerror) {
       /*
-       * Set the UE identifier
+       * Notify EMM that common procedure has been initiated
        */
-      emm_context->common_proc->common_arg.u.identification_data.ue_id = ue_id;
-      /*
-       * Reset the retransmission counter
-       */
-      emm_context->common_proc->common_arg.u.identification_data.retransmission_count = 0;
-      /*
-       * Set the type of the requested identity
-       */
-      emm_context->common_proc->common_arg.u.identification_data.type = type;
-      /*
-       * Set the failure notification indicator
-       */
-      emm_context->common_proc->common_arg.u.identification_data.notify_failure = false;
-      /*
-       * Send identity request message to the UE
-       */
-      rc = _identification_request (&emm_context->common_proc->common_arg.u.identification_data);
+      emm_sap_t                               emm_sap = {0};
 
-      if (rc != RETURNerror) {
-        /*
-         * Notify EMM that common procedure has been initiated
-         */
-        emm_sap_t                               emm_sap = {0};
-
-        emm_sap.primitive = EMMREG_COMMON_PROC_REQ;
-        emm_sap.u.emm_reg.ue_id = ue_id;
-        emm_sap.u.emm_reg.ctx = emm_context;
-        rc = emm_sap_send (&emm_sap);
-        MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "EMMREG_COMMON_PROC_REQ (IDENT) ue id " MME_UE_S1AP_ID_FMT " ",ue_id);
-      }
+      emm_sap.primitive = EMMREG_COMMON_PROC_REQ;
+      emm_sap.u.emm_reg.ue_id = ue_id;
+      emm_sap.u.emm_reg.ctx   = emm_context;
+      rc = emm_sap_send (&emm_sap);
+      MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "EMMREG_COMMON_PROC_REQ (IDENT) ue id " MME_UE_S1AP_ID_FMT " ",ue_id);
     }
   }
 
@@ -258,75 +226,121 @@ emm_proc_identification_complete (
   emm_context_t                          *emm_ctx = NULL;
 
   OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Identification complete (ue_id=" MME_UE_S1AP_ID_FMT ")\n", ue_id);
-  /*
-   * Release retransmission timer parameters
-   */
-  //identification_data_t                  *data = (identification_data_t *) (emm_proc_common_get_args (ue_id));
 
   // Get the UE context
   ue_mm_context_t *ue_mm_context = mme_ue_context_exists_mme_ue_s1ap_id (&mme_app_desc.mme_ue_contexts, ue_id);
   if (ue_mm_context) {
     emm_ctx = &ue_mm_context->emm_context;
-  }
+    nas_emm_ident_proc_t * ident_proc = get_nas_common_procedure_identification(emm_ctx);
 
-  if (emm_ctx) {
-    REQUIREMENT_3GPP_24_301(R10_5_4_4_4);
-    /*
-     * Stop timer T3470
-     */
-    OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Stop timer T3470 (%lx)\n", emm_ctx->T3470.id);
-    emm_ctx->T3470.id = nas_timer_stop (emm_ctx->T3470.id);
-
-    MSC_LOG_EVENT (MSC_NAS_EMM_MME, "T3470 stopped UE " MME_UE_S1AP_ID_FMT " ", ue_id);
-
-    if (imsi) {
+    if (ident_proc){
+      REQUIREMENT_3GPP_24_301(R10_5_4_4_4);
       /*
-       * Update the IMSI
+       * Stop timer T3470
        */
-      imsi64_t imsi64 = imsi_to_imsi64(imsi);
-      emm_ctx_set_valid_imsi(emm_ctx, imsi, imsi64);
-    } else if (imei) {
-      /*
-       * Update the IMEI
-       */
-      emm_ctx_set_valid_imei(emm_ctx, imei);
-    } else if (imeisv) {
-      /*
-       * Update the IMEISV
-       */
-      emm_ctx_set_valid_imeisv(emm_ctx, imeisv);
-    } else if (tmsi) {
-      /*
-       * Update the GUTI
-       */
-      AssertFatal(false, "TODO, should not happen because this type of identity is not requested by MME");
-    }
+      void *timer_callback_args = NULL;
+      nas_stop_T3470(ue_id, &ident_proc->T3470, timer_callback_args);
 
-    /*
-     * Notify EMM that the identification procedure successfully completed
-     */
-    MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "EMMREG_COMMON_PROC_CNF (IDENT) ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
-    emm_sap.primitive = EMMREG_COMMON_PROC_CNF;
-    emm_sap.u.emm_reg.ue_id = ue_id;
-    emm_sap.u.emm_reg.ctx = emm_ctx;
-    emm_sap.u.emm_reg.u.common.is_attached = emm_ctx->is_attached;
-    emm_ctx_unmark_common_procedure_running(emm_ctx, EMM_CTXT_COMMON_PROC_IDENT);
-  } else {
-    OAILOG_ERROR (LOG_NAS_EMM, "EMM-PROC  - No EMM context exists\n");
-    /*
-     * Notify EMM that the identification procedure failed
-     */
-    MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "EMMREG_COMMON_PROC_REJ (IDENT) ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
-    emm_sap.primitive = EMMREG_COMMON_PROC_REJ;
-    emm_sap.u.emm_reg.ue_id = ue_id;
-    emm_sap.u.emm_reg.ctx = emm_ctx;
-  }
+      if (imsi) {
+        /*
+         * Update the IMSI
+         */
+        imsi64_t imsi64 = imsi_to_imsi64(imsi);
+        emm_ctx_set_valid_imsi(emm_ctx, imsi, imsi64);
+      } else if (imei) {
+        /*
+         * Update the IMEI
+         */
+        emm_ctx_set_valid_imei(emm_ctx, imei);
+      } else if (imeisv) {
+        /*
+         * Update the IMEISV
+         */
+        emm_ctx_set_valid_imeisv(emm_ctx, imeisv);
+      } else if (tmsi) {
+        /*
+         * Update the GUTI
+         */
+        AssertFatal(false, "TODO, should not happen because this type of identity is not requested by MME");
+      }
 
-  rc = emm_sap_send (&emm_sap);
+      /*
+       * Notify EMM that the identification procedure successfully completed
+       */
+      MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "EMMREG_COMMON_PROC_CNF (IDENT) ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
+      emm_sap.primitive = EMMREG_COMMON_PROC_CNF;
+      emm_sap.u.emm_reg.ue_id    = ue_id;
+      emm_sap.u.emm_reg.ctx      = emm_ctx;
+      emm_sap.u.emm_reg.notify   = true;
+      emm_sap.u.emm_reg.free_proc = true;
+      emm_sap.u.emm_reg.u.common.common_proc            = &ident_proc->emm_com_proc;
+      emm_sap.u.emm_reg.u.common.previous_emm_fsm_state = ident_proc->emm_com_proc.emm_proc.previous_emm_fsm_state;
+      rc = emm_sap_send (&emm_sap);
+
+    }// else ignore the response if procedure not found
+  } // else ignore the response if ue context not found
 
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
 }
 
+//------------------------------------------------------------------------------
+int emm_proc_identification_ll_failure (const mme_ue_s1ap_id_t ue_id)
+{
+  OAILOG_FUNC_IN (LOG_NAS_EMM);
+  int                                     rc = RETURNerror;
+  emm_context_t                          *emm_ctx = NULL;
+
+  OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Identification Lower Layer Failure (ue_id=" MME_UE_S1AP_ID_FMT ")\n", ue_id);
+
+  // Get the UE context
+  ue_mm_context_t *ue_mm_context = mme_ue_context_exists_mme_ue_s1ap_id (&mme_app_desc.mme_ue_contexts, ue_id);
+  if (ue_mm_context) {
+    emm_ctx = &ue_mm_context->emm_context;
+    nas_emm_ident_proc_t * ident_proc = get_nas_common_procedure_identification(emm_ctx);
+
+    if (ident_proc) {
+      emm_sap_t emm_sap = {0};
+      emm_sap.primitive = EMMREG_LOWERLAYER_FAILURE;
+      emm_sap.u.emm_reg.ue_id = ident_proc->ue_id;
+      emm_sap.u.emm_reg.ctx   = emm_ctx;
+      emm_sap.u.emm_reg.notify= true;
+      emm_sap.u.emm_reg.free_proc = true;
+      emm_sap.u.emm_reg.u.ll_failure.emm_proc   = &ident_proc->emm_com_proc.emm_proc;
+      emm_sap.u.emm_reg.u.ll_failure.previous_emm_fsm_state   =  ident_proc->emm_com_proc.emm_proc.previous_emm_fsm_state;
+      MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "0 EMMREG_LOWERLAYER_FAILURE (identification) ue id " MME_UE_S1AP_ID_FMT " ", ident_proc->ue_id);
+      emm_sap_send (&emm_sap);
+    }
+  }
+  OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
+}
+
+//------------------------------------------------------------------------------
+int emm_proc_identification_sdu_not_delivered_ho (const mme_ue_s1ap_id_t ue_id)
+{
+  OAILOG_FUNC_IN (LOG_NAS_EMM);
+  int                                     rc = RETURNerror;
+
+  OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Identification SDU not delivered due to HO (ue_id=" MME_UE_S1AP_ID_FMT ")\n", ue_id);
+
+  // Get the UE context
+  ue_mm_context_t *ue_mm_context = mme_ue_context_exists_mme_ue_s1ap_id (&mme_app_desc.mme_ue_contexts, ue_id);
+  if (ue_mm_context) {
+    emm_context_t *emm_ctx = &ue_mm_context->emm_context;
+    nas_emm_ident_proc_t * ident_proc = get_nas_common_procedure_identification(emm_ctx);
+
+    emm_sap_t emm_sap = {0};
+    emm_sap.primitive = EMMREG_LOWERLAYER_NON_DELIVERY;
+    emm_sap.u.emm_reg.ue_id = ident_proc->ue_id;
+    emm_sap.u.emm_reg.ctx   = emm_ctx;
+    emm_sap.u.emm_reg.notify= true;
+    emm_sap.u.emm_reg.free_proc = true;
+    emm_sap.u.emm_reg.u.non_delivery_ho.emm_proc   = &ident_proc->emm_com_proc.emm_proc;
+    emm_sap.u.emm_reg.u.non_delivery_ho.previous_emm_fsm_state   =  ident_proc->emm_com_proc.emm_proc.previous_emm_fsm_state;
+    MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "0 EMMREG_LOWERLAYER_NON_DELIVERY (identification) ue id " MME_UE_S1AP_ID_FMT " ", ue_mm_context->mme_ue_s1ap_id);
+    emm_sap_send (&emm_sap);
+  }
+  OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
+}
 
 /****************************************************************************/
 /*********************  L O C A L    F U N C T I O N S  *********************/
@@ -358,51 +372,59 @@ emm_proc_identification_complete (
  **      Others:    None                                       **
  **                                                                        **
  ***************************************************************************/
-static void *_identification_t3470_handler (void *args)
+static void _identification_t3470_handler (void *args)
 {
   OAILOG_FUNC_IN (LOG_NAS_EMM);
-  emm_context_t                       *emm_ctx = (emm_context_t*)args;
-  ue_mm_context_t                     *ue_mm_context = NULL;
+  emm_context_t                       *emm_ctx = (emm_context_t *) (args);
 
-  if (emm_ctx) {
-    ue_mm_context = PARENT_STRUCT(emm_ctx, struct ue_mm_context_s, emm_context);
-    OAILOG_WARNING (LOG_NAS_EMM, "T3470 timer (%lx) expired ue id " MME_UE_S1AP_ID_FMT " \n",
-        emm_ctx->T3470.id, ue_mm_context->mme_ue_s1ap_id);
-    emm_ctx->T3470.id = NAS_TIMER_INACTIVE_ID;
+  if (!(emm_ctx)) {
+    OAILOG_ERROR (LOG_NAS_EMM, "T3470 timer expired No EMM context\n");
+    OAILOG_FUNC_OUT (LOG_NAS_EMM);
   }
-  if (emm_ctx_is_common_procedure_running(emm_ctx, EMM_CTXT_COMMON_PROC_IDENT)){
-    identification_data_t                  *data = &emm_ctx->common_proc->common_arg.u.identification_data;
+  nas_emm_ident_proc_t * ident_proc = get_nas_common_procedure_identification(emm_ctx);
 
-    /*
+  if (ident_proc){
+    OAILOG_WARNING (LOG_NAS_EMM, "T3470 timer (%lx) expired ue id " MME_UE_S1AP_ID_FMT " \n",
+        ident_proc->T3470.id, ident_proc->ue_id);
+    ident_proc->T3470.id = NAS_TIMER_INACTIVE_ID;
+   /*
      * Increment the retransmission counter
      */
-    data->retransmission_count += 1;
+    ident_proc->retransmission_count += 1;
     OAILOG_WARNING (LOG_NAS_EMM, "EMM-PROC  - T3470 (%lx) retransmission counter = %d ue id " MME_UE_S1AP_ID_FMT " \n",
-        emm_ctx->T3470.id, data->retransmission_count, ue_mm_context->mme_ue_s1ap_id);
+        ident_proc->T3470.id, ident_proc->retransmission_count, ident_proc->ue_id);
 
-    if (data->retransmission_count < IDENTIFICATION_COUNTER_MAX) {
+    if (ident_proc->retransmission_count < IDENTIFICATION_COUNTER_MAX) {
       REQUIREMENT_3GPP_24_301(R10_5_4_4_6_b__1);
       /*
        * Send identity request message to the UE
        */
-      _identification_request (data);
+      _identification_request (ident_proc);
     } else {
 
       /*
       * Abort the identification procedure
       */
       REQUIREMENT_3GPP_24_301(R10_5_4_4_6_b__2);
-      emm_sap_t                               emm_sap = {0};
-      emm_sap.primitive = EMMREG_PROC_ABORT;
-      emm_sap.u.emm_reg.ue_id = ue_mm_context->mme_ue_s1ap_id;
-      emm_sap.u.emm_reg.ctx   = emm_ctx;
-      data->notify_failure = true;
-      MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "0 EMMREG_PROC_ABORT (identification) ue id " MME_UE_S1AP_ID_FMT " ", ue_mm_context->mme_ue_s1ap_id);
-      emm_sap_send (&emm_sap);
-    }
-  }
 
-  OAILOG_FUNC_RETURN (LOG_NAS_EMM, NULL);
+      emm_sap_t                               emm_sap = {0};
+      emm_sap.primitive = EMMREG_COMMON_PROC_ABORT;
+      emm_sap.u.emm_reg.ue_id = ident_proc->ue_id;
+      emm_sap.u.emm_reg.ctx   = emm_ctx;
+      emm_sap.u.emm_reg.notify= false;
+      emm_sap.u.emm_reg.free_proc = true;
+      emm_sap.u.emm_reg.u.common.common_proc   = (nas_emm_common_proc_t*)(&ident_proc->emm_com_proc);
+      emm_sap.u.emm_reg.u.common.previous_emm_fsm_state   =  ((nas_emm_proc_t*)ident_proc)->previous_emm_fsm_state;
+      MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "0 EMMREG_PROC_ABORT (identification) ue id " MME_UE_S1AP_ID_FMT " ", ident_proc->ue_id);
+      emm_sap_send (&emm_sap);
+
+      nas_delete_all_emm_procedures(emm_ctx);
+    }
+  } else {
+    OAILOG_ERROR (LOG_NAS_EMM, "T3470 timer (%lx) expired ue id " MME_UE_S1AP_ID_FMT " No Identification procedure found\n",
+        ident_proc->T3470.id, ident_proc->ue_id);
+  }
+  OAILOG_FUNC_OUT (LOG_NAS_EMM);
 }
 
 /*
@@ -421,99 +443,69 @@ static void *_identification_t3470_handler (void *args)
  *      Return:    None
  *      Others:    T3470
  */
-int _identification_request (identification_data_t * data)
+static int _identification_request (nas_emm_ident_proc_t * const proc)
 {
+  OAILOG_FUNC_IN (LOG_NAS_EMM);
   emm_sap_t                          emm_sap = {0};
   int                                rc      = RETURNok;
   struct emm_context_s              *emm_ctx = NULL;
 
-  OAILOG_FUNC_IN (LOG_NAS_EMM);
-  /*
-   * Notify EMM-AS SAP that Identity Request message has to be sent
-   * to the UE
-   */
-  MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "EMMAS_SECURITY_REQ ue id " MME_UE_S1AP_ID_FMT " IDENTIFICATION", data->ue_id);
-  emm_sap.primitive = EMMAS_SECURITY_REQ;
-  emm_sap.u.emm_as.u.security.guti = NULL;
-  emm_sap.u.emm_as.u.security.ue_id = data->ue_id;
-  emm_sap.u.emm_as.u.security.msg_type = EMM_AS_MSG_TYPE_IDENT;
-  emm_sap.u.emm_as.u.security.ident_type = data->type;
-
-  ue_mm_context_t *ue_mm_context = mme_ue_context_exists_mme_ue_s1ap_id (&mme_app_desc.mme_ue_contexts, data->ue_id);
+  ue_mm_context_t *ue_mm_context = mme_ue_context_exists_mme_ue_s1ap_id (&mme_app_desc.mme_ue_contexts, proc->ue_id);
   if (ue_mm_context) {
     emm_ctx = &ue_mm_context->emm_context;
   } else {
     OAILOG_FUNC_RETURN (LOG_NAS_EMM, RETURNerror);
   }
+  /*
+   * Notify EMM-AS SAP that Identity Request message has to be sent
+   * to the UE
+   */
+  MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "EMMAS_SECURITY_REQ ue id " MME_UE_S1AP_ID_FMT " IDENTIFICATION", proc->ue_id);
+  emm_sap.primitive = EMMAS_SECURITY_REQ;
+  emm_sap.u.emm_as.u.security.guti = NULL;
+  emm_sap.u.emm_as.u.security.ue_id = proc->ue_id;
+  emm_sap.u.emm_as.u.security.msg_type = EMM_AS_MSG_TYPE_IDENT;
+  emm_sap.u.emm_as.u.security.ident_type = proc->identity_type;
+
 
   /*
    * Setup EPS NAS security data
    */
   emm_as_set_security_data (&emm_sap.u.emm_as.u.security.sctx, &emm_ctx->_security, false, true);
-  MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "0 EMMAS_SECURITY_REQ (identification) ue id " MME_UE_S1AP_ID_FMT " ", data->ue_id);
+  MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "0 EMMAS_SECURITY_REQ (identification) ue id " MME_UE_S1AP_ID_FMT " ", proc->ue_id);
   rc = emm_sap_send (&emm_sap);
 
   if (rc != RETURNerror) {
-    emm_ctx_mark_common_procedure_running(emm_ctx, EMM_CTXT_COMMON_PROC_IDENT);
-
     REQUIREMENT_3GPP_24_301(R10_5_4_4_2);
-
-    if (emm_ctx->T3470.id != NAS_TIMER_INACTIVE_ID) {
-      /*
-       * Re-start T3470 timer
-       */
-      emm_ctx->T3470.id = nas_timer_stop (emm_ctx->T3470.id);
-      MSC_LOG_EVENT (MSC_NAS_EMM_MME, "T3470 restarted UE " MME_UE_S1AP_ID_FMT " ", data->ue_id);
-      OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Timer T3470 (%lx) stopped, expires in %ld seconds\n", emm_ctx->T3470.id, emm_ctx->T3470.sec);
-    }
     /*
      * Start T3470 timer
      */
-    emm_ctx->T3470.id = nas_timer_start (emm_ctx->T3470.sec, 0 /*usec*/, _identification_t3470_handler, emm_ctx);
-    MSC_LOG_EVENT (MSC_NAS_EMM_MME, "T3470 started UE " MME_UE_S1AP_ID_FMT " ", data->ue_id);
-    OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Timer T3470 (%lx) started, expires in %ld seconds\n", emm_ctx->T3470.id, emm_ctx->T3470.sec);
+    nas_start_T3470(proc->ue_id, &proc->T3470, proc->emm_com_proc.emm_proc.base_proc.time_out, (void*)emm_ctx);
   }
-
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
 }
 
 
 //------------------------------------------------------------------------------
-static int _identification_ll_failure (struct emm_context_s *emm_context)
+static int _identification_ll_failure (struct emm_context_s *emm_context, struct nas_emm_proc_s * emm_proc)
 {
   OAILOG_FUNC_IN (LOG_NAS_EMM);
   int                                     rc = RETURNerror;
-  if (emm_context) {
-    if (emm_ctx_is_common_procedure_running(emm_context, EMM_CTXT_COMMON_PROC_IDENT)){
-      identification_data_t                  *data = &emm_context->common_proc->common_arg.u.identification_data;
-      REQUIREMENT_3GPP_24_301(R10_5_4_4_6_a);
-      emm_sap_t                               emm_sap = {0};
-      mme_ue_s1ap_id_t                        ue_id = PARENT_STRUCT(emm_context, struct ue_mm_context_s, emm_context)->mme_ue_s1ap_id;
-
-      emm_sap.primitive = EMMREG_PROC_ABORT;
-      emm_sap.u.emm_reg.ue_id = ue_id;
-      emm_sap.u.emm_reg.ctx   = emm_context;
-      data->notify_failure = true;
-      MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "0 EMMREG_PROC_ABORT (identification) ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
-      rc = emm_sap_send (&emm_sap);
-    }
-    // abort ANY ongoing EMM procedure (R10_5_4_4_6_a)
-    emm_proc_specific_abort(&emm_context->specific_proc);
+  if ((emm_context) && (emm_proc)) {
+    REQUIREMENT_3GPP_24_301(R10_5_4_4_6_a);
+    nas_delete_all_emm_procedures(emm_context);
   }
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
 }
 
 //------------------------------------------------------------------------------
-static int _identification_non_delivered_ho (struct emm_context_s *emm_context)
+static int _identification_non_delivered_ho (struct emm_context_s *emm_context, struct nas_emm_proc_s * emm_proc)
 {
   OAILOG_FUNC_IN (LOG_NAS_EMM);
   int                                     rc = RETURNerror;
-  if (emm_context) {
-    if (emm_ctx_is_common_procedure_running(emm_context, EMM_CTXT_COMMON_PROC_IDENT)){
-      identification_data_t                  *data = &emm_context->common_proc->common_arg.u.identification_data;
-      REQUIREMENT_3GPP_24_301(R10_5_4_2_7_j);
-      rc = _identification_request(data);
-    }
+  if ((emm_context) && (emm_proc)) {
+    REQUIREMENT_3GPP_24_301(R10_5_4_2_7_j);
+    rc = _identification_request((nas_emm_ident_proc_t *)emm_proc);
   }
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
 }
@@ -530,49 +522,24 @@ static int _identification_non_delivered_ho (struct emm_context_s *emm_context)
  *      Return:    None
  *      Others:    T3470
  */
-static int _identification_abort (struct emm_context_s *emm_context)
+static int _identification_abort (struct emm_context_s *emm_context, struct nas_base_proc_s* base_proc)
 {
   OAILOG_FUNC_IN (LOG_NAS_EMM);
   int                                     rc = RETURNerror;
 
-  if (emm_context) {
-    if (emm_ctx_is_common_procedure_running(emm_context, EMM_CTXT_COMMON_PROC_IDENT)){
-      identification_data_t                  *data = &emm_context->common_proc->common_arg.u.identification_data;
-      unsigned int                            ue_id = data->ue_id;
-      int                                     notify_failure = data->notify_failure;
+  if ((emm_context) && (base_proc)) {
+    nas_emm_ident_proc_t * ident_proc = (nas_emm_ident_proc_t*)base_proc;
+    AssertFatal((NAS_PROC_TYPE_EMM == base_proc->type) &&
+        (NAS_EMM_PROC_TYPE_COMMON == ((nas_emm_proc_t*)base_proc)->type) &&
+        (EMM_COMM_PROC_IDENT == ((nas_emm_common_proc_t*)base_proc)->type), "Mismatch in procedure type");
 
-      OAILOG_WARNING (LOG_NAS_EMM, "EMM-PROC  - Abort identification procedure " "(ue_id=" MME_UE_S1AP_ID_FMT ")\n", ue_id);
+    OAILOG_WARNING (LOG_NAS_EMM, "EMM-PROC  - Abort identification procedure " "(ue_id=" MME_UE_S1AP_ID_FMT ")\n", ident_proc->ue_id);
 
-      /*
-       * Stop timer T3470
-       */
-      emm_ctx_unmark_common_procedure_running(emm_context, EMM_CTXT_COMMON_PROC_IDENT);
-
-      if (emm_context->T3470.id != NAS_TIMER_INACTIVE_ID) {
-        OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Stop timer T3470 (%lx)\n", emm_context->T3470.id);
-        emm_context->T3470.id = nas_timer_stop (emm_context->T3470.id);
-        MSC_LOG_EVENT (MSC_NAS_EMM_MME, "T3470 stopped UE " MME_UE_S1AP_ID_FMT " ", data->ue_id);
-      }
-
-      /*
-       * Notify EMM that the identification procedure failed
-       */
-      if (notify_failure) {
-        MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "EMMREG_COMMON_PROC_REJ ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
-        emm_sap_t                               emm_sap = {0};
-
-        emm_sap.primitive = EMMREG_COMMON_PROC_REJ;
-        emm_sap.u.emm_reg.ue_id = ue_id;
-        emm_sap.u.emm_reg.ctx   = emm_context;
-        MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "0 EMMREG_COMMON_PROC_REJ (abort identification) ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
-        rc = emm_sap_send (&emm_sap);
-      } else {
-        rc = RETURNok;
-      }
-      /*
-       * Release retransmission timer parameters
-       */
-    }
+    /*
+     * Stop timer T3470
+     */
+    void * callback_arg = NULL;
+    nas_stop_T3470(ident_proc->ue_id, &ident_proc->T3470, callback_arg);
   }
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
 }

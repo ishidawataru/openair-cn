@@ -71,8 +71,18 @@ void free_esm_bearer_context(esm_ebr_context_t * esm_ebr_context)
     if (esm_ebr_context->tft) {
       free_traffic_flow_template(&esm_ebr_context->tft);
     }
-    if (esm_ebr_context->args) {
-      AssertFatal(0, "TODO");
+    if (NAS_TIMER_INACTIVE_ID != esm_ebr_context->timer.id) {
+      esm_ebr_timer_data_t * esm_ebr_timer_data = NULL;
+      esm_ebr_context->timer.id = nas_timer_stop (esm_ebr_context->timer.id, (void**)&esm_ebr_timer_data);
+      /*
+       * Release the retransmisison timer parameters
+       */
+      if (esm_ebr_timer_data) {
+        if (esm_ebr_timer_data->msg) {
+          bdestroy_wrapper (&esm_ebr_timer_data->msg);
+        }
+        free_wrapper ((void**)&esm_ebr_timer_data);
+      }
     }
   }
 }
@@ -102,25 +112,31 @@ void esm_bearer_context_init(esm_ebr_context_t * esm_ebr_context)
 //  }
 //}
 
-// free allocated structs
 //------------------------------------------------------------------------------
-void free_esm_context_content(esm_context_t * esm_context)
+void nas_stop_T3489(esm_context_t * const esm_ctx)
 {
 
-  if (esm_context) {
-    emm_context_t        *emm_context   = PARENT_STRUCT(esm_context, struct emm_context_s, esm_ctx);
+  if ((esm_ctx) && (esm_ctx->T3489.id != NAS_TIMER_INACTIVE_ID)) {
+    emm_context_t        *emm_context   = PARENT_STRUCT(esm_ctx, struct emm_context_s, esm_ctx);
     ue_mm_context_t      *ue_mm_context = PARENT_STRUCT(emm_context, struct ue_mm_context_s, emm_context);
     mme_ue_s1ap_id_t       ue_id = ue_mm_context->mme_ue_s1ap_id;
-   if (esm_context->T3489.id != NAS_TIMER_INACTIVE_ID) {
-      OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Stop timer T3489 (%ld)\n", esm_context->T3489.id);
-      esm_context->T3489.id = nas_timer_stop (esm_context->T3489.id);
-      if (NAS_TIMER_INACTIVE_ID == esm_context->T3489.id) {
-        MSC_LOG_EVENT (MSC_NAS_EMM_MME, "0 T3489 stopped UE " MME_UE_S1AP_ID_FMT " ", ue_id);
-        OAILOG_DEBUG (LOG_NAS_EMM, "T3489 stopped UE " MME_UE_S1AP_ID_FMT " ", ue_id);
-      } else {
-        OAILOG_ERROR (LOG_NAS_EMM, "Could not stop T3489 stopped UE " MME_UE_S1AP_ID_FMT " ", ue_id);
-      }
+    void *nas_timer_callback_args;
+    esm_ctx->T3489.id = nas_timer_stop (esm_ctx->T3489.id, (void**)&nas_timer_callback_args);
+    if (NAS_TIMER_INACTIVE_ID == esm_ctx->T3489.id) {
+      MSC_LOG_EVENT (MSC_NAS_EMM_MME, "0 T3489 stopped UE " MME_UE_S1AP_ID_FMT " ", ue_id);
+      OAILOG_INFO (LOG_NAS_EMM, "T3489 stopped UE " MME_UE_S1AP_ID_FMT " ", ue_id);
+    } else {
+      OAILOG_ERROR (LOG_NAS_EMM, "Could not stop T3489 UE " MME_UE_S1AP_ID_FMT " ", ue_id);
     }
+  }
+}
+
+// free allocated structs
+//------------------------------------------------------------------------------
+void free_esm_context_content(esm_context_t * esm_ctx)
+{
+  if (esm_ctx) {
+    nas_stop_T3489(esm_ctx);
   }
 }
 

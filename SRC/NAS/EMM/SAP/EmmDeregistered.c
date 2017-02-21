@@ -109,6 +109,11 @@ EmmDeregistered (
     rc = RETURNok;
     break;
 
+  case EMMREG_ATTACH_ABORT:
+    AssertFatal(0, "TODO");
+    break;
+
+
   case _EMMREG_COMMON_PROC_REQ:
     /*
      * An EMM common procedure has been initiated;

@@ -255,10 +255,9 @@ void nas_itti_pdn_connectivity_req(
 }
 
 //------------------------------------------------------------------------------
-void nas_itti_auth_info_req(
+int nas_itti_auth_info_req(
   const mme_ue_s1ap_id_t ue_idP,
   const imsi_t   * const imsiP,
-  const bool             is_initial_reqP,
   plmn_t         * const visited_plmnP,
   const uint8_t          num_vectorsP,
   const_bstring const auts_pP)
@@ -274,8 +273,9 @@ void nas_itti_auth_info_req(
   IMSI_TO_STRING(imsiP,auth_info_req->imsi, IMSI_BCD_DIGITS_MAX+1);
   auth_info_req->imsi_length = strlen(auth_info_req->imsi);
 
-  AssertFatal((15 >= auth_info_req->imsi_length) && (0 < auth_info_req->imsi_length),
-      "Bad IMSI length %d", auth_info_req->imsi_length);
+  if ((15 >= auth_info_req->imsi_length) && (0 < auth_info_req->imsi_length)) {
+    OAILOG_FUNC_RETURN(LOG_NAS, RETURNerror);
+  }
 
   auth_info_req->visited_plmn  = *visited_plmnP;
   auth_info_req->nb_of_vectors = num_vectorsP;
@@ -288,11 +288,11 @@ void nas_itti_auth_info_req(
     memset (auth_info_req->auts, 0, sizeof (auth_info_req->auts));
   }
 
-  MSC_LOG_TX_MESSAGE (MSC_NAS_MME, MSC_S6A_MME, NULL, 0, "0 S6A_AUTH_INFO_REQ IMSI "IMSI_64_FMT" visited_plmn "PLMN_FMT" re_sync %u",
-      imsi64_P, PLMN_ARG(visited_plmnP), auth_info_req->re_synchronization);
-  itti_send_msg_to_task (TASK_S6A, INSTANCE_DEFAULT, message_p);
+  MSC_LOG_TX_MESSAGE (MSC_NAS_MME, MSC_S6A_MME, NULL, 0, "0 S6A_AUTH_INFO_REQ IMSI %s visited_plmn "PLMN_FMT" re_sync %u",
+      auth_info_req->imsi, PLMN_ARG(visited_plmnP), auth_info_req->re_synchronization);
+  int rc = itti_send_msg_to_task (TASK_S6A, INSTANCE_DEFAULT, message_p);
 
-  OAILOG_FUNC_OUT(LOG_NAS);
+  OAILOG_FUNC_RETURN(LOG_NAS, rc);
 }
 
 //------------------------------------------------------------------------------
