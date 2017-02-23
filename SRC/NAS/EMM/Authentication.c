@@ -218,7 +218,6 @@ emm_proc_authentication_ksi (
       /*
        * Notify EMM that common procedure has been initiated
        */
-      MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "EMMREG_COMMON_PROC_REQ (AUTH) ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
       emm_sap_t                               emm_sap = {0};
 
       emm_sap.primitive = EMMREG_COMMON_PROC_REQ;
@@ -502,7 +501,6 @@ int emm_proc_authentication_failure (
 
       // Only to return to a "valid" EMM state
       {
-        MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "EMMREG_COMMON_PROC_REJ ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
         emm_sap_t                               emm_sap = {0};
         emm_sap.primitive = EMMREG_COMMON_PROC_REJ;
         emm_sap.u.emm_reg.ue_id     = ue_id;
@@ -534,7 +532,6 @@ int emm_proc_authentication_failure (
             /*
              * Notify EMM that the authentication procedure failed
              */
-            MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "EMMREG_COMMON_PROC_REJ ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
             emm_sap_t           emm_sap = {0};
             emm_sap.primitive = EMMREG_COMMON_PROC_REJ;
             emm_sap.u.emm_reg.ue_id     = ue_id;
@@ -549,7 +546,6 @@ int emm_proc_authentication_failure (
           REQUIREMENT_3GPP_24_301(R10_5_4_2_5__2);
           auth_proc->emm_cause = EMM_CAUSE_MAC_FAILURE; //EMM_CAUSE_ILLEGAL_UE;
           // Do not accept the UE to attach to the network
-          MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "EMMREG_COMMON_PROC_REJ ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
           emm_sap_t           emm_sap = {0};
           emm_sap.primitive = EMMREG_COMMON_PROC_REJ;
           emm_sap.u.emm_reg.ue_id     = ue_id;
@@ -589,7 +585,6 @@ int emm_proc_authentication_failure (
         } else {
           REQUIREMENT_3GPP_24_301(R10_5_4_2_7_e__NOTE3);
           auth_proc->emm_cause = EMM_CAUSE_SYNCH_FAILURE;
-          MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "EMMREG_COMMON_PROC_REJ ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
           emm_sap_t           emm_sap = {0};
           emm_sap.primitive = EMMREG_COMMON_PROC_REJ;
           emm_sap.u.emm_reg.ue_id     = ue_id;
@@ -623,7 +618,6 @@ int emm_proc_authentication_failure (
           OAILOG_WARNING (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT "EMM-PROC  - Failed to initiate identification procedure\n", ue_mm_context->mme_ue_s1ap_id);
           auth_proc->emm_cause = EMM_CAUSE_ILLEGAL_UE;
           // Do not accept the UE to attach to the network
-          MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "EMMREG_COMMON_PROC_REJ ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
           emm_sap_t                               emm_sap = {0};
           emm_sap.primitive = EMMREG_COMMON_PROC_REJ;
           emm_sap.u.emm_reg.ue_id     = ue_id;
@@ -721,7 +715,6 @@ emm_proc_authentication_complete (
             /*
              * Notify EMM that the authentication procedure failed
              */
-            MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "EMMREG_COMMON_PROC_REJ ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
             emm_sap_t                               emm_sap = {0};
             emm_sap.primitive = EMMREG_COMMON_PROC_REJ;
             emm_sap.u.emm_reg.ue_id = ue_id;
@@ -749,8 +742,6 @@ emm_proc_authentication_complete (
           /*
            * Notify EMM that the authentication procedure successfully completed
            */
-          MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "EMMREG_COMMON_PROC_CNF ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
-          OAILOG_DEBUG (LOG_NAS_EMM, "EMM-PROC  - Notify EMM that the authentication procedure successfully completed\n");
           emm_sap_t                               emm_sap = {0};
           emm_sap.primitive = EMMREG_COMMON_PROC_CNF;
           emm_sap.u.emm_reg.ue_id = ue_id;
@@ -792,7 +783,6 @@ emm_proc_authentication_complete (
           /*
            * Notify EMM that the authentication procedure failed
            */
-          MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "EMMREG_COMMON_PROC_REJ (AUTH) ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
           emm_sap_t                               emm_sap = {0};
           emm_sap.primitive = EMMREG_COMMON_PROC_REJ;
           emm_sap.u.emm_reg.ue_id = ue_id;
@@ -883,7 +873,6 @@ static void  _authentication_t3460_handler (void *args)
       /*
        * Release the NAS signalling connection
        */
-      MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "0 EMMAS_RELEASE_REQ ue id " MME_UE_S1AP_ID_FMT " ", auth_proc->ue_id);
       emm_sap_t                               emm_sap = {0};
       emm_sap.primitive = EMMAS_RELEASE_REQ;
       emm_sap.u.emm_as.u.release.guti = NULL;
@@ -894,7 +883,6 @@ static void  _authentication_t3460_handler (void *args)
       /*
        * Abort the authentication procedure
        */
-      MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "0 EMMREG_PROC_ABORT ue id " MME_UE_S1AP_ID_FMT " ", auth_proc->ue_id);
       memset((void*)&emm_sap, 0, sizeof(emm_sap));
       emm_sap.primitive = EMMREG_COMMON_PROC_ABORT;
       emm_sap.u.emm_reg.ue_id     = auth_proc->ue_id;
@@ -956,7 +944,6 @@ static int _authentication_check_imsi_5_4_2_5__1 (struct emm_context_s *emm_cont
       }
     }
     REQUIREMENT_3GPP_24_301(R10_5_4_2_5__2);
-    MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "EMMREG_COMMON_PROC_REJ ue id " MME_UE_S1AP_ID_FMT " ", auth_proc->ue_id);
     emm_sap_t                               emm_sap = {0};
     emm_sap.primitive = EMMREG_COMMON_PROC_REJ;
     emm_sap.u.emm_reg.ue_id     = auth_proc->ue_id;
@@ -982,7 +969,6 @@ static int _authentication_check_imsi_5_4_2_5__1_fail (struct emm_context_s *emm
 
   if (auth_proc){
     REQUIREMENT_3GPP_24_301(R10_5_4_2_5__2);
-    MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "EMMREG_COMMON_PROC_REJ ue id " MME_UE_S1AP_ID_FMT " ", auth_proc->ue_id);
     emm_sap_t                               emm_sap = {0};
     emm_sap.primitive = EMMREG_COMMON_PROC_REJ;
     emm_sap.u.emm_reg.ue_id     = auth_proc->ue_id;
@@ -1044,7 +1030,6 @@ static int _authentication_request (nas_emm_auth_proc_t * auth_proc)
      */
     emm_as_set_security_data (&emm_sap.u.emm_as.u.security.sctx, &emm_ctx->_security, false, true);
     REQUIREMENT_3GPP_24_301(R10_5_4_2_2);
-    MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "EMMAS_SECURITY_REQ ue id " MME_UE_S1AP_ID_FMT " ", auth_proc->ue_id);
     rc = emm_sap_send (&emm_sap);
 
     if (rc != RETURNerror) {
@@ -1090,7 +1075,6 @@ static int _authentication_reject (emm_context_t *emm_context, struct nas_base_p
      * Notify EMM-AS SAP that Authentication Reject message has to be sent
      * to the UE
      */
-    MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "0 EMMAS_SECURITY_REJ ue id " MME_UE_S1AP_ID_FMT " ", auth_proc->ue_id);
     emm_sap.primitive                    = EMMAS_SECURITY_REJ;
     emm_sap.u.emm_as.u.security.guti     = NULL;
     emm_sap.u.emm_as.u.security.ue_id    = auth_proc->ue_id;

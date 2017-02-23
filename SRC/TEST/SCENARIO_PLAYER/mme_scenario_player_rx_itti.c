@@ -63,6 +63,7 @@
 #include "itti_free_defined_msg.h"
 #include "itti_comp.h"
 #include "sp_xml_compare.h"
+#include "mme_scenario_player_rx_itti.h"
 
 extern scenario_player_t g_msp_scenarios;
 

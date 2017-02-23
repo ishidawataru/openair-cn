@@ -250,9 +250,12 @@ emm_proc_attach_request (
     if (!ue_mm_context) {
       ue_mm_context = mme_ue_context_exists_enb_ue_s1ap_id (&mme_app_desc.mme_ue_contexts, enb_ue_s1ap_id_key);
       if (ue_mm_context) {
-        OAILOG_WARNING (LOG_NAS_EMM, "EMM-PROC  - Found old ue_mm_context matching enb_ue_s1ap_id in ATTACH_REQUEST...very suspicious\n");
-        ue_id = emm_ctx_get_new_ue_id(&ue_mm_context->emm_context);
-        mme_api_notified_new_ue_s1ap_id_association (ue_mm_context->enb_ue_s1ap_id, ies->originating_ecgi->cell_identity.enb_id, ue_id);
+        if (INVALID_MME_UE_S1AP_ID == ue_mm_context->mme_ue_s1ap_id) {
+          ue_id = emm_ctx_get_new_ue_id(&ue_mm_context->emm_context);
+          mme_api_notified_new_ue_s1ap_id_association (ue_mm_context->enb_ue_s1ap_id, ies->originating_ecgi->cell_identity.enb_id, ue_id);
+        } else {
+          OAILOG_WARNING (LOG_NAS_EMM, "EMM-PROC  - Found old ue_mm_context matching enb_ue_s1ap_id in ATTACH_REQUEST...very suspicious\n");
+        }
       }
     }
   }
@@ -467,7 +470,9 @@ emm_proc_attach_request (
     AssertFatal(0, "Should not go create a new context here");
   }
 
-  AssertFatal(is_nas_specific_procedure_attach_running(&ue_mm_context->emm_context), "Should have a Attach procedure");
+  if (!is_nas_specific_procedure_attach_running(&ue_mm_context->emm_context)) {
+    _emm_proc_create_procedure_attach_request(ue_mm_context, ies);
+  }
 
   rc = _emm_attach_run_procedure (&ue_mm_context->emm_context);
 //  if (ies->last_visited_registered_tai) {
@@ -637,7 +642,6 @@ int emm_proc_attach_complete (
     emm_sap.u.emm_reg.notify = true;
     emm_sap.u.emm_reg.free_proc = true;
     emm_sap.u.emm_reg.u.attach.proc = attach_proc;
-    MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "0 EMMREG_ATTACH_CNF ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
     rc = emm_sap_send (&emm_sap);
   } else if (esm_sap.err != ESM_SAP_DISCARDED) {
     /*
@@ -740,7 +744,6 @@ static void _emm_attach_t3450_handler (void *args)
       emm_sap.u.emm_reg.notify= true;
       emm_sap.u.emm_reg.free_proc = true;
       emm_sap.u.emm_reg.u.attach.proc   = attach_proc;
-      MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "0 EMMREG_ATTACH_ABORT ue id " MME_UE_S1AP_ID_FMT " ", attach_proc->ue_id);
       emm_sap_send (&emm_sap);
     }
     // TODO REQUIREMENT_3GPP_24_301(R10_5_5_1_2_7_c__3) not coded
@@ -835,7 +838,6 @@ int _emm_attach_reject (emm_context_t *emm_context, struct nas_base_proc_s * nas
   } else {
     emm_as_set_security_data (&emm_sap.u.emm_as.u.establish.sctx, NULL, false, true);
   }
-  MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "0 EMMAS_ESTABLISH_REJ ue id " MME_UE_S1AP_ID_FMT " ", attach_proc->ue_id);
   rc = emm_sap_send (&emm_sap);
 
   /*
@@ -891,9 +893,7 @@ static int _emm_attach_abort (struct emm_context_s* emm_context, struct nas_base
     /*
      * Notify EMM that EPS attach procedure failed
      */
-    MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_ESM_MME, NULL, 0, "0 EMMREG_ATTACH_REJ ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
     emm_sap_t                               emm_sap = {0};
-
     emm_sap.primitive = EMMREG_ATTACH_REJ;
     emm_sap.u.emm_reg.ue_id = ue_id;
     emm_sap.u.emm_reg.ctx = emm_context;
@@ -1406,7 +1406,6 @@ static int _emm_send_attach_accept (emm_context_t * emm_context)
       emm_sap.u.emm_as.u.establish.t3402 = &mme_config.nas_config.t3402_min;
 
       REQUIREMENT_3GPP_24_301(R10_5_5_1_2_4__2);
-      MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "0 EMMAS_ESTABLISH_CNF ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
       rc = emm_sap_send (&emm_sap);
 
       if (RETURNerror != rc) {
