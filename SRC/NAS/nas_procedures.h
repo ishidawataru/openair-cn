@@ -125,18 +125,23 @@ typedef struct nas_emm_attach_proc_s {
   int                              emm_cause;
 } nas_emm_attach_proc_t;
 
-struct emm_detach_request_params_s;
+struct emm_detach_request_ies_s;
 
 typedef struct nas_emm_detach_proc_s {
   nas_emm_specific_proc_t             emm_spec_proc;
-  struct emm_detach_request_params_s *ies;
+  struct emm_detach_request_ies_s *ies;
 } nas_emm_detach_proc_t;
 
-struct emm_tau_request_params_s;
+struct emm_tau_request_ies_s;
 
 typedef struct nas_emm_tau_proc_s {
-  nas_emm_specific_proc_t             emm_spec_proc;
-  struct emm_tau_request_params_s    *ies;
+  nas_emm_specific_proc_t          emm_spec_proc;
+  struct nas_timer_s               T3450;   // EMM message retransmission timer
+#define TAU_COUNTER_MAX  5
+  unsigned int                     retransmission_count; /* Retransmission counter   */
+  bstring                          esm_msg_out; // ESM message to be sent within the Attach Accept message
+  struct emm_tau_request_ies_s    *ies;
+  int                              emm_cause;
 } nas_emm_tau_proc_t;
 
 //------------------------------------------------------------------------------
@@ -222,11 +227,24 @@ typedef struct nas_emm_info_proc_s {
 } nas_emm_info_proc_t;
 
 //------------------------------------------------------------------------------
+typedef enum {
+  EMM_CON_MNGT_PROC_NONE = 0,
+  EMM_CON_MNGT_PROC_PAGING,
+  EMM_CON_MNGT_PROC_SERVICE_REQUEST
+} emm_con_mngt_proc_type_t;
+
 // EMM Connection management procedures
 typedef struct nas_emm_con_mngt_proc_s {
   nas_emm_proc_t              emm_proc;
-  int                         type;
+  emm_con_mngt_proc_type_t    type;
 } nas_emm_con_mngt_proc_t;
+
+typedef struct nas_sr_proc_s {
+  nas_emm_con_mngt_proc_t     con_mngt_proc;
+  mme_ue_s1ap_id_t            ue_id;
+  int                         emm_cause;
+} nas_sr_proc_t;
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // ESM procedures
@@ -311,6 +329,8 @@ nas_emm_auth_proc_t *get_nas_common_procedure_authentication(const struct emm_co
 
 nas_auth_info_proc_t *get_nas_cn_procedure_auth_info(const struct emm_context_s * const ctxt);
 
+nas_sr_proc_t *get_nas_con_mngt_procedure_service_request(const struct emm_context_s * const ctxt);
+
 bool is_nas_specific_procedure_attach_running(const struct emm_context_s * const ctxt);
 bool is_nas_specific_procedure_detach_running(const struct emm_context_s * const ctxt);
 bool is_nas_specific_procedure_tau_running(const struct emm_context_s * const ctxt);
@@ -326,11 +346,16 @@ bool is_nas_attach_complete_received(const nas_emm_attach_proc_t * const attach_
 int nas_unlink_procedures(nas_base_proc_t * const parent_proc, nas_base_proc_t * const child_proc);
 
 void nas_delete_all_emm_procedures(struct emm_context_s * const emm_context);
+void nas_delete_common_procedure(struct emm_context_s * const emm_context, nas_emm_common_proc_t **  proc);
 void nas_delete_attach_procedure(struct emm_context_s * const emm_context);
-void nas_delete_identification_procedure(struct emm_context_s *emm_context, nas_emm_ident_proc_t * ident_proc);
+void nas_delete_tau_procedure(struct emm_context_s *emm_context);
+void nas_delete_detach_procedure(struct emm_context_s *emm_context);
+
 void nas_delete_cn_procedure(struct emm_context_s *emm_context, nas_cn_proc_t * cn_proc);
 
-int nas_new_attach_procedure(struct emm_context_s * const emm_context);
+nas_emm_attach_proc_t *nas_new_attach_procedure(struct emm_context_s * const emm_context);
+nas_emm_tau_proc_t *nas_new_tau_procedure(struct emm_context_s * const emm_context);
+nas_sr_proc_t* nas_new_service_request_procedure(struct emm_context_s * const emm_context);
 nas_emm_ident_proc_t *nas_new_identification_procedure(struct emm_context_s * const emm_context);
 nas_emm_auth_proc_t *nas_new_authentication_procedure(struct emm_context_s * const emm_context);
 nas_emm_smc_proc_t *nas_new_smc_procedure(struct emm_context_s * const emm_context);

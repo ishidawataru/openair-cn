@@ -190,7 +190,7 @@ emm_proc_detach (
 int
 emm_proc_detach_request (
   mme_ue_s1ap_id_t ue_id,
-  emm_detach_request_params_t * params)
+  emm_detach_request_ies_t * params)
 {
   OAILOG_FUNC_IN (LOG_NAS_EMM);
   int                                     rc;
@@ -295,6 +295,22 @@ emm_proc_detach_request (
 
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
 }
+
+//------------------------------------------------------------------------------
+void free_emm_detach_request_ies(emm_detach_request_ies_t ** const ies)
+{
+  if ((*ies)->guti) {
+    free_wrapper((void**)&(*ies)->guti);
+  }
+  if ((*ies)->imsi) {
+    free_wrapper((void**)&(*ies)->imsi);
+  }
+  if ((*ies)->imei) {
+    free_wrapper((void**)&(*ies)->imei);
+  }
+  free_wrapper((void**)ies);
+}
+
 
 /****************************************************************************/
 /*********************  L O C A L    F U N C T I O N S  *********************/

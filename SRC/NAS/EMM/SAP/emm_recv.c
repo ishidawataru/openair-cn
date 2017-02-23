@@ -48,7 +48,10 @@
 
 #include "bstrlib.h"
 
+#include "common_types.h"
 #include "3gpp_24.007.h"
+#include "3gpp_24.008.h"
+#include "3gpp_29.274.h"
 #include "emm_recv.h"
 #include "commonDef.h"
 #include "common_defs.h"
@@ -58,7 +61,9 @@
 #include "emm_proc.h"
 #include "mme_config.h"
 #include "3gpp_requirements_24.301.h"
+#include "mme_app_defs.h"
 
+extern mme_app_desc_t                          mme_app_desc;
 
 /****************************************************************************/
 /****************  E X T E R N A L    D E F I N I T I O N S  ****************/
@@ -144,7 +149,7 @@ emm_recv_attach_request (
   const mme_ue_s1ap_id_t ue_id,
   const tai_t              * const originating_tai,
   const ecgi_t             * const originating_ecgi,
-  const attach_request_msg * const msg,
+  attach_request_msg       * const msg,
   const bool                       is_initial,
   int * const emm_cause,
   const nas_message_decode_status_t  * decode_status)
@@ -204,15 +209,15 @@ emm_recv_attach_request (
      * Get the GUTI
      */
     params->guti = calloc(1, sizeof(guti_t));
-    params->guti.gummei.plmn.mcc_digit1 = msg->oldgutiorimsi.guti.mcc_digit1;
-    params->guti.gummei.plmn.mcc_digit2 = msg->oldgutiorimsi.guti.mcc_digit2;
-    params->guti.gummei.plmn.mcc_digit3 = msg->oldgutiorimsi.guti.mcc_digit3;
-    params->guti.gummei.plmn.mnc_digit1 = msg->oldgutiorimsi.guti.mnc_digit1;
-    params->guti.gummei.plmn.mnc_digit2 = msg->oldgutiorimsi.guti.mnc_digit2;
-    params->guti.gummei.plmn.mnc_digit3 = msg->oldgutiorimsi.guti.mnc_digit3;
-    params->guti.gummei.mme_gid = msg->oldgutiorimsi.guti.mme_group_id;
-    params->guti.gummei.mme_code = msg->oldgutiorimsi.guti.mme_code;
-    params->guti.m_tmsi = msg->oldgutiorimsi.guti.m_tmsi;
+    params->guti->gummei.plmn.mcc_digit1 = msg->oldgutiorimsi.guti.mcc_digit1;
+    params->guti->gummei.plmn.mcc_digit2 = msg->oldgutiorimsi.guti.mcc_digit2;
+    params->guti->gummei.plmn.mcc_digit3 = msg->oldgutiorimsi.guti.mcc_digit3;
+    params->guti->gummei.plmn.mnc_digit1 = msg->oldgutiorimsi.guti.mnc_digit1;
+    params->guti->gummei.plmn.mnc_digit2 = msg->oldgutiorimsi.guti.mnc_digit2;
+    params->guti->gummei.plmn.mnc_digit3 = msg->oldgutiorimsi.guti.mnc_digit3;
+    params->guti->gummei.mme_gid = msg->oldgutiorimsi.guti.mme_group_id;
+    params->guti->gummei.mme_code = msg->oldgutiorimsi.guti.mme_code;
+    params->guti->m_tmsi = msg->oldgutiorimsi.guti.m_tmsi;
   } else if (msg->oldgutiorimsi.imsi.typeofidentity == EPS_MOBILE_IDENTITY_IMSI) {
     /*
      * Get the IMSI
@@ -236,10 +241,10 @@ emm_recv_attach_request (
     params->imsi->u.num.parity  = 0x0f;
     for (int index=0; index < IMSI_BCD8_SIZE; index++) {
       if (params->imsi->u.value[index] == 0xff) {
-        params->imsi.length = index;
+        params->imsi->length = index;
         break;
       } else  if ((params->imsi->u.value[index] & 0x0f) == 0x0f) {
-        params->imsi.length = index + 1;
+        params->imsi->length = index + 1;
         break;
       }
     }
@@ -275,13 +280,13 @@ emm_recv_attach_request (
 
   if (msg->presencemask & ATTACH_REQUEST_LAST_VISITED_REGISTERED_TAI_PRESENT) {
     params->last_visited_registered_tai = calloc(1, sizeof(tai_t));
-    params->last_visited_registered_tai.mcc_digit1 = msg->lastvisitedregisteredtai.mcc_digit1;
-    params->last_visited_registered_tai.mcc_digit2 = msg->lastvisitedregisteredtai.mcc_digit2;
-    params->last_visited_registered_tai.mcc_digit3 = msg->lastvisitedregisteredtai.mcc_digit3;
-    params->last_visited_registered_tai.mnc_digit1 = msg->lastvisitedregisteredtai.mnc_digit1;
-    params->last_visited_registered_tai.mnc_digit2 = msg->lastvisitedregisteredtai.mnc_digit2;
-    params->last_visited_registered_tai.mnc_digit3 = msg->lastvisitedregisteredtai.mnc_digit3;
-    params->last_visited_registered_tai.tac = msg->lastvisitedregisteredtai.tac;
+    params->last_visited_registered_tai->mcc_digit1 = msg->lastvisitedregisteredtai.mcc_digit1;
+    params->last_visited_registered_tai->mcc_digit2 = msg->lastvisitedregisteredtai.mcc_digit2;
+    params->last_visited_registered_tai->mcc_digit3 = msg->lastvisitedregisteredtai.mcc_digit3;
+    params->last_visited_registered_tai->mnc_digit1 = msg->lastvisitedregisteredtai.mnc_digit1;
+    params->last_visited_registered_tai->mnc_digit2 = msg->lastvisitedregisteredtai.mnc_digit2;
+    params->last_visited_registered_tai->mnc_digit3 = msg->lastvisitedregisteredtai.mnc_digit3;
+    params->last_visited_registered_tai->tac = msg->lastvisitedregisteredtai.tac;
   }
   if (msg->presencemask & ATTACH_REQUEST_DRX_PARAMETER_PRESENT) {
     params->drx_parameter = calloc(1, sizeof(drx_parameter_t));
@@ -381,11 +386,11 @@ emm_recv_detach_request (
   /*
    * Message processing
    */
-  emm_detach_request_params_t * params = calloc(1, sizeof(*params));
+  emm_detach_request_ies_t * params = calloc(1, sizeof(*params));
   /*
    * Get the detach type
    */
-  emm_proc_detach_type_t                  type = EMM_DETACH_TYPE_RESERVED;
+  params->type = EMM_DETACH_TYPE_RESERVED;
 
   if (msg->detachtype.typeofdetach == DETACH_TYPE_EPS) {
     params->type = EMM_DETACH_TYPE_EPS;
@@ -484,7 +489,7 @@ emm_recv_detach_request (
   /*
    * Execute the UE initiated detach procedure completion by the network
    */
-  rc = emm_proc_detach_request (params);
+  rc = emm_proc_detach_request (ue_id, params);
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
 }
 
@@ -507,8 +512,9 @@ int
 emm_recv_tracking_area_update_request (
   const mme_ue_s1ap_id_t ue_id,
   tracking_area_update_request_msg * const msg,
-  int *emm_cause,
-  const nas_message_decode_status_t  * decode_status)
+  const bool is_initial,
+  int * const emm_cause,
+  const nas_message_decode_status_t  * const decode_status)
 {
   int                                     rc = RETURNok;
 
@@ -524,7 +530,7 @@ emm_recv_tracking_area_update_request (
     ue_mm_context_t *ue_mm_context = mme_ue_context_exists_mme_ue_s1ap_id (&mme_app_desc.mme_ue_contexts, ue_id);
     if (ue_mm_context) {
       if (is_nas_specific_procedure_attach_running (&ue_mm_context->emm_context)) {
-        nas_emm_attach_proc_t *attach_proc = (nas_emm_attach_proc_t*)ue_mm_context->emm_context->emm_procedures->emm_specific_proc;
+        nas_emm_attach_proc_t *attach_proc = (nas_emm_attach_proc_t*)ue_mm_context->emm_context.emm_procedures->emm_specific_proc;
 
         if (is_nas_attach_accept_sent(attach_proc) &&
             !(is_nas_attach_complete_received(attach_proc))) {
@@ -539,8 +545,80 @@ emm_recv_tracking_area_update_request (
     }
     rc = emm_proc_tracking_area_update_reject (ue_id, EMM_CAUSE_IMPLICITLY_DETACHED);
   } else {
-    // TODO later emm_tau_request_params_t
-    rc = emm_proc_tracking_area_update_request(ue_id, msg, emm_cause, decode_status);
+    emm_tau_request_ies_t * ies = calloc(1, sizeof(*ies));
+    ies->is_initial = is_initial;
+    // Mandatory fields
+    ies->eps_update_type = msg->epsupdatetype;
+    ies->is_native_sc   = (msg->naskeysetidentifier.tsc != NAS_KEY_SET_IDENTIFIER_MAPPED);
+    ies->ksi            = msg->naskeysetidentifier.naskeysetidentifier;
+
+    ies->old_guti.gummei.plmn.mcc_digit1 = msg->oldguti.guti.mcc_digit1;
+    ies->old_guti.gummei.plmn.mcc_digit2 = msg->oldguti.guti.mcc_digit2;
+    ies->old_guti.gummei.plmn.mcc_digit3 = msg->oldguti.guti.mcc_digit3;
+    ies->old_guti.gummei.plmn.mnc_digit1 = msg->oldguti.guti.mnc_digit1;
+    ies->old_guti.gummei.plmn.mnc_digit2 = msg->oldguti.guti.mnc_digit2;
+    ies->old_guti.gummei.plmn.mnc_digit3 = msg->oldguti.guti.mnc_digit3;
+    ies->old_guti.gummei.mme_gid         = msg->oldguti.guti.mme_group_id;
+    ies->old_guti.gummei.mme_code        = msg->oldguti.guti.mme_code;
+    ies->old_guti.m_tmsi                 = msg->oldguti.guti.m_tmsi;
+
+    // Optional fields
+    if (msg->presencemask & TRACKING_AREA_UPDATE_REQUEST_NONCURRENT_NATIVE_NAS_KEY_SET_IDENTIFIER_PRESENT) {
+      ies->is_native_non_current_sc   = (msg->noncurrentnativenaskeysetidentifier.tsc != NAS_KEY_SET_IDENTIFIER_MAPPED);
+      ies->non_current_ksi            = msg->noncurrentnativenaskeysetidentifier.naskeysetidentifier;
+    }
+
+    // NOT TODO additional_guti, useless
+    if (msg->presencemask & TRACKING_AREA_UPDATE_REQUEST_UE_NETWORK_CAPABILITY_PRESENT) {
+      ies->ue_network_capability = calloc(1, sizeof(*ies->ue_network_capability));
+      memcpy(ies->ue_network_capability, &msg->uenetworkcapability, sizeof(*ies->ue_network_capability));
+    }
+    if (msg->presencemask & TRACKING_AREA_UPDATE_REQUEST_LAST_VISITED_REGISTERED_TAI_PRESENT) {
+      ies->last_visited_registered_tai = calloc(1, sizeof(*ies->last_visited_registered_tai));
+      memcpy(ies->last_visited_registered_tai, &msg->lastvisitedregisteredtai, sizeof(*ies->last_visited_registered_tai));
+    }
+    if (msg->presencemask & TRACKING_AREA_UPDATE_REQUEST_DRX_PARAMETER_PRESENT) {
+      ies->drx_parameter = calloc(1, sizeof(*ies->drx_parameter));
+      memcpy(ies->drx_parameter, &msg->drxparameter, sizeof(*ies->drx_parameter));
+    }
+    if (msg->presencemask & TRACKING_AREA_UPDATE_REQUEST_UE_RADIO_CAPABILITY_INFORMATION_UPDATE_NEEDED_PRESENT) {
+      ies->is_ue_radio_capability_information_update_needed = (msg->ueradiocapabilityinformationupdateneeded) ? true:false;
+    }
+    if (msg->presencemask & TRACKING_AREA_UPDATE_REQUEST_EPS_BEARER_CONTEXT_STATUS_PRESENT) {
+      ies->eps_bearer_context_status = calloc(1, sizeof(*ies->eps_bearer_context_status));
+      memcpy(ies->eps_bearer_context_status, &msg->epsbearercontextstatus, sizeof(*ies->eps_bearer_context_status));
+    }
+    if (msg->presencemask & TRACKING_AREA_UPDATE_REQUEST_MS_NETWORK_CAPABILITY_PRESENT) {
+      ies->ms_network_capability = calloc(1, sizeof(*ies->ms_network_capability));
+      memcpy(ies->ms_network_capability, &msg->msnetworkcapability, sizeof(*ies->ms_network_capability));
+    }
+    if (msg->presencemask & TRACKING_AREA_UPDATE_REQUEST_TMSI_STATUS_PRESENT) {
+      ies->tmsi_status = calloc(1, sizeof(*ies->tmsi_status));
+      memcpy(ies->tmsi_status, &msg->tmsistatus, sizeof(*ies->tmsi_status));
+    }
+    if (msg->presencemask & TRACKING_AREA_UPDATE_REQUEST_MOBILE_STATION_CLASSMARK_2_PRESENT) {
+      ies->mobile_station_classmark2 = calloc(1, sizeof(*ies->mobile_station_classmark2));
+      memcpy(ies->mobile_station_classmark2, &msg->mobilestationclassmark2, sizeof(*ies->mobile_station_classmark2));
+    }
+    if (msg->presencemask & TRACKING_AREA_UPDATE_REQUEST_MOBILE_STATION_CLASSMARK_3_PRESENT) {
+      ies->mobile_station_classmark3 = calloc(1, sizeof(*ies->mobile_station_classmark3));
+      memcpy(ies->mobile_station_classmark3, &msg->mobilestationclassmark3, sizeof(*ies->mobile_station_classmark3));
+    }
+    if (msg->presencemask & TRACKING_AREA_UPDATE_REQUEST_SUPPORTED_CODECS_PRESENT) {
+      ies->supported_codecs = calloc(1, sizeof(*ies->supported_codecs));
+      memcpy(ies->supported_codecs, &msg->supportedcodecs, sizeof(*ies->supported_codecs));
+    }
+    if (msg->presencemask & TRACKING_AREA_UPDATE_REQUEST_ADDITIONAL_UPDATE_TYPE_PRESENT) {
+      ies->additional_updatetype = calloc(1, sizeof(*ies->additional_updatetype));
+      memcpy(ies->additional_updatetype, &msg->additionalupdatetype, sizeof(*ies->additional_updatetype));
+    }
+    if (msg->presencemask & TRACKING_AREA_UPDATE_REQUEST_OLD_GUTI_TYPE_PRESENT) {
+      ies->old_guti_type = calloc(1, sizeof(*ies->old_guti_type));
+      memcpy(ies->old_guti_type, &msg->oldgutitype, sizeof(*ies->old_guti_type));
+    }
+
+    ies->decode_status = *decode_status;
+    rc = emm_proc_tracking_area_update_request(ue_id, ies, emm_cause);
   }
 
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
@@ -566,6 +644,7 @@ emm_recv_service_request (
   mme_ue_s1ap_id_t ue_id,
   enb_ue_s1ap_id_t enb_ue_s1ap_id,
   const service_request_msg * msg,
+  const bool is_initial,
   int *emm_cause,
   const nas_message_decode_status_t  * decode_status)
 {

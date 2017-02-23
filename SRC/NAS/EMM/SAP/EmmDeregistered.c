@@ -56,11 +56,16 @@
 #include <arpa/inet.h>
 #include <assert.h>
 
+#include "bstrlib.h"
+
+#include "log.h"
 #include "common_defs.h"
 #include "emm_fsm.h"
 #include "commonDef.h"
+#include "3gpp_24.007.h"
+#include "3gpp_24.008.h"
+#include "3gpp_29.274.h"
 #include "networkDef.h"
-#include "log.h"
 #include "emm_proc.h"
 
 /****************************************************************************/
@@ -92,27 +97,15 @@
  **      Others:    emm_fsm_status                             **
  **                                                                        **
  ***************************************************************************/
-int
-EmmDeregistered (
-  const emm_reg_t * evt)
+int EmmDeregistered (emm_reg_t * const evt)
 {
   OAILOG_FUNC_IN (LOG_NAS_EMM);
   int                                     rc = RETURNerror;
+  emm_context_t                          *emm_ctx = evt->ctx;
 
-  assert (emm_fsm_get_state (evt->ctx) == EMM_DEREGISTERED);
+  assert (emm_fsm_get_state (emm_ctx) == EMM_DEREGISTERED);
 
   switch (evt->primitive) {
-  case _EMMREG_PROC_ABORT:
-    /*
-     * Ongoing EMM procedure aborted
-     */
-    rc = RETURNok;
-    break;
-
-  case EMMREG_ATTACH_ABORT:
-    AssertFatal(0, "TODO");
-    break;
-
 
   case _EMMREG_COMMON_PROC_REQ:
     /*
@@ -122,13 +115,103 @@ EmmDeregistered (
     rc = emm_fsm_set_state (evt->ue_id, evt->ctx, EMM_COMMON_PROCEDURE_INITIATED);
     break;
 
+  case _EMMREG_COMMON_PROC_CNF:
+    OAILOG_ERROR (LOG_NAS_EMM, "EMM-FSM   - Primitive _EMMREG_COMMON_PROC_CNF is not valid\n");
+    break;
+
+  case _EMMREG_COMMON_PROC_REJ:
+    OAILOG_ERROR (LOG_NAS_EMM, "EMM-FSM   - Primitive _EMMREG_COMMON_PROC_REJ is not valid\n");
+    break;
+
+  case _EMMREG_COMMON_PROC_ABORT:
+    OAILOG_ERROR (LOG_NAS_EMM, "EMM-FSM   - Primitive _EMMREG_COMMON_PROC_ABORT is not valid\n");
+    break;
+
   case _EMMREG_ATTACH_CNF:
     /*
      * Attach procedure successful and default EPS bearer
      * context activated;
      * enter state EMM-REGISTERED.
      */
+    if ((emm_ctx) && (evt->notify) && (evt->u.attach.proc) && (evt->u.attach.proc->emm_spec_proc.emm_proc.base_proc.success_notif)) {
+      rc = (*evt->u.attach.proc->emm_spec_proc.emm_proc.base_proc.success_notif)(emm_ctx);
+    }
+    if (evt->free_proc) {
+      nas_delete_attach_procedure(emm_ctx);
+    }
     rc = emm_fsm_set_state (evt->ue_id, evt->ctx, EMM_REGISTERED);
+    break;
+
+  case _EMMREG_ATTACH_REJ:
+    /*
+     * Attach procedure failed;
+     * enter state EMM-DEREGISTERED.
+     */
+    rc = emm_fsm_set_state (evt->ue_id, emm_ctx, EMM_DEREGISTERED);
+
+    if ((emm_ctx) && (evt->u.attach.proc) && (evt->u.attach.proc->emm_spec_proc.emm_proc.base_proc.fail_out)) {
+      rc = (*evt->u.attach.proc->emm_spec_proc.emm_proc.base_proc.fail_out)(emm_ctx, &evt->u.attach.proc->emm_spec_proc.emm_proc.base_proc);
+    }
+
+    if ((emm_ctx) && (evt->notify) && (evt->u.attach.proc) && (evt->u.attach.proc->emm_spec_proc.emm_proc.base_proc.failure_notif)) {
+      rc = (*evt->u.attach.proc->emm_spec_proc.emm_proc.base_proc.failure_notif)(emm_ctx);
+    }
+    if (evt->free_proc) {
+      nas_delete_attach_procedure(emm_ctx);
+    }
+    break;
+
+  case _EMMREG_ATTACH_ABORT:
+    if ((emm_ctx) && (evt->u.attach.proc) && (evt->u.attach.proc->emm_spec_proc.emm_proc.base_proc.abort)) {
+      rc = (*evt->u.attach.proc->emm_spec_proc.emm_proc.base_proc.abort)(emm_ctx, &evt->u.attach.proc->emm_spec_proc.emm_proc.base_proc);
+    }
+
+    if ((emm_ctx) && (evt->notify) && (evt->u.attach.proc) && (evt->u.attach.proc->emm_spec_proc.emm_proc.base_proc.failure_notif)) {
+      rc = (*evt->u.attach.proc->emm_spec_proc.emm_proc.base_proc.failure_notif)(emm_ctx);
+    }
+    if (evt->free_proc) {
+      nas_delete_attach_procedure(emm_ctx);
+    }
+    break;
+
+  case _EMMREG_DETACH_INIT:
+    OAILOG_ERROR (LOG_NAS_EMM, "EMM-FSM   - Primitive _EMMREG_DETACH_INIT is not valid\n");
+    break;
+
+  case _EMMREG_DETACH_REQ:
+    OAILOG_ERROR (LOG_NAS_EMM, "EMM-FSM   - Primitive _EMMREG_DETACH_REQ is not valid\n");
+    break;
+
+  case _EMMREG_DETACH_FAILED:
+    OAILOG_ERROR (LOG_NAS_EMM, "EMM-FSM   - Primitive _EMMREG_DETACH_FAILED is not valid\n");
+    break;
+
+  case _EMMREG_DETACH_CNF:
+    OAILOG_ERROR (LOG_NAS_EMM, "EMM-FSM   - Primitive _EMMREG_DETACH_CNF is not valid\n");
+    break;
+
+  case _EMMREG_TAU_REQ:
+    OAILOG_ERROR (LOG_NAS_EMM, "EMM-FSM   - Primitive _EMMREG_TAU_REQ is not valid\n");
+    break;
+
+  case _EMMREG_TAU_CNF:
+    OAILOG_ERROR (LOG_NAS_EMM, "EMM-FSM   - Primitive _EMMREG_TAU_CNF is not valid\n");
+    break;
+
+  case _EMMREG_TAU_REJ:
+    OAILOG_ERROR (LOG_NAS_EMM, "EMM-FSM   - Primitive _EMMREG_TAU_REJ is not valid\n");
+    break;
+
+  case _EMMREG_SERVICE_REQ:
+    OAILOG_ERROR (LOG_NAS_EMM, "EMM-FSM   - Primitive _EMMREG_SERVICE_REQ is not valid\n");
+    break;
+
+  case _EMMREG_SERVICE_CNF:
+    OAILOG_ERROR (LOG_NAS_EMM, "EMM-FSM   - Primitive _EMMREG_SERVICE_CNF is not valid\n");
+    break;
+
+  case _EMMREG_SERVICE_REJ:
+    OAILOG_ERROR (LOG_NAS_EMM, "EMM-FSM   - Primitive _EMMREG_SERVICE_REJ is not valid\n");
     break;
 
   case _EMMREG_LOWERLAYER_SUCCESS:
@@ -138,25 +221,42 @@ EmmDeregistered (
     rc = RETURNok;
     break;
 
-    case _EMMREG_LOWERLAYER_RELEASE:
-    case _EMMREG_LOWERLAYER_FAILURE:
+  case _EMMREG_LOWERLAYER_FAILURE:
     /*
-     * Data failed to be delivered to the network
+     * Transmission failure occurred before the EMM common
+     * procedure being completed
      */
+
+    if ((emm_ctx) && (evt->notify) && (evt->u.ll_failure.emm_proc->base_proc.failure_notif)) {
+      rc = (*evt->u.ll_failure.emm_proc->base_proc.failure_notif)(emm_ctx);
+    }
+
+    break;
+
+  case _EMMREG_LOWERLAYER_RELEASE:
+    /*
+     * Transmission failure occurred before the EMM common
+     * procedure being completed
+     */
+
+    if ((emm_ctx) && (evt->notify) && (evt->u.ll_failure.emm_proc) && (evt->u.ll_failure.emm_proc->base_proc.failure_notif)) {
+      rc = (*evt->u.ll_failure.emm_proc->base_proc.failure_notif)(emm_ctx);
+    }
     rc = RETURNok;
     break;
 
-  case _EMMREG_LOWERLAYER_NON_DELIVERY:
-    /*
-     * Data failed to be delivered to the peer
-     */
-    rc = RETURNok;
+  case  _EMMREG_LOWERLAYER_NON_DELIVERY:
+    if ((emm_ctx) && (evt->notify) && (evt->u.non_delivery_ho.emm_proc) && (evt->u.non_delivery_ho.emm_proc->base_proc.failure_notif)) {
+      rc = (*evt->u.non_delivery_ho.emm_proc->base_proc.failure_notif)(emm_ctx);
+    } else {
+      rc = RETURNok;
+    }
     break;
-
 
   default:
     OAILOG_ERROR (LOG_NAS_EMM, "EMM-FSM   - Primitive is not valid (%d)\n", evt->primitive);
     break;
+
   }
 
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);

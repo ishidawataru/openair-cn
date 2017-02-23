@@ -46,7 +46,10 @@
 #include <stdlib.h>
 #include <arpa/inet.h>
 
+#include "bstrlib.h"
+
 #include "3gpp_24.007.h"
+#include "3gpp_24.008.h"
 #include "emm_esm.h"
 #include "commonDef.h"
 #include "common_defs.h"

@@ -68,7 +68,6 @@
 #include "assertions.h"
 #include "emm_data.h"
 #include "esm_sap.h"
-#include "EmmCommon.h"
 #include "3gpp_requirements_24.301.h"
 #include "mme_app_defs.h"
 #include "mme_app_apn_selection.h"
@@ -111,7 +110,6 @@ static int _emm_cn_authentication_res (const emm_cn_auth_res_t * msg)
   if (ue_mm_context) {
     emm_ctx = &ue_mm_context->emm_context;
     nas_auth_info_proc_t * auth_info_proc = get_nas_cn_procedure_auth_info(emm_ctx);
-    int                                     rc = RETURNerror;
 
     if (auth_info_proc) {
       memcpy(auth_info_proc->vector, msg->vector, msg->nb_vectors);
@@ -139,7 +137,6 @@ static int _emm_cn_authentication_fail (const emm_cn_auth_fail_t * msg)
   if (ue_mm_context) {
     emm_ctx = &ue_mm_context->emm_context;
     nas_auth_info_proc_t * auth_info_proc = get_nas_cn_procedure_auth_info(emm_ctx);
-    int                                     rc = RETURNerror;
 
     if (auth_info_proc) {
       auth_info_proc->nas_cause = msg->cause;
@@ -158,9 +155,12 @@ static int _emm_cn_deregister_ue (const mme_ue_s1ap_id_t ue_id)
 
   OAILOG_FUNC_IN (LOG_NAS_EMM);
   OAILOG_WARNING (LOG_NAS_EMM, "EMM-PROC  - " "TODO deregister UE " MME_UE_S1AP_ID_FMT ", following procedure is a test\n", ue_id);
-  emm_proc_detach_request (ue_id, EMM_DETACH_TYPE_EPS /* ??? emm_proc_detach_type_t */ ,
-                           0 /*switch_off */ , 0 /*native_ksi */ , 0 /*ksi */ ,
-                           NULL /*guti */ , NULL /*imsi */ , NULL /*imei */ );
+  emm_detach_request_ies_t * params = calloc(1, sizeof(*params));
+  params->type         = EMM_DETACH_TYPE_EPS;
+  params->switch_off   = false;
+  params->is_native_sc = false;
+  params->ksi          = 0;
+  emm_proc_detach_request (ue_id, params);
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
 }
 
@@ -281,7 +281,6 @@ static int _emm_cn_pdn_connectivity_res (emm_cn_pdn_res_t * msg_pP)
   bstring                                 rsp = NULL;
   bool                                    is_standalone = false;    // warning hardcoded
   bool                                    triggered_by_ue = true;  // warning hardcoded
-  attach_data_t                          *data_p = NULL;
 
   ue_mm_context_t *ue_mm_context = mme_ue_context_exists_mme_ue_s1ap_id (&mme_app_desc.mme_ue_contexts, msg_pP->ue_id);
 
@@ -384,15 +383,14 @@ static int _emm_cn_pdn_connectivity_res (emm_cn_pdn_res_t * msg_pP)
    * END OF CODE THAT WAS IN esm_sap.c/_esm_sap_recv()
    */
   /*************************************************************************/
-  if ((emm_ctx->specific_proc) && (EMM_SPECIFIC_PROC_TYPE_ATTACH == emm_ctx->specific_proc->type)) {
-    data_p = (attach_data_t *) &emm_ctx->specific_proc->arg.u.attach_data;
-  }
+  nas_emm_attach_proc_t                  *attach_proc = get_nas_specific_procedure_attach(emm_ctx);
 
-  if (data_p) {
+  if (attach_proc) {
+
     /*
      * Setup the ESM message container
      */
-    data_p->esm_msg = rsp;
+    attach_proc->esm_msg_out = rsp;
 
     /*
      * Send attach accept message to the UE
@@ -404,7 +402,8 @@ static int _emm_cn_pdn_connectivity_res (emm_cn_pdn_res_t * msg_pP)
           (memcmp(&emm_ctx->_old_guti, &emm_ctx->_guti, sizeof(emm_ctx->_guti)))) {
         /*
          * Implicit GUTI reallocation;
-         * * * * Notify EMM that common procedure has been initiated
+         * Notify EMM that common procedure has been initiated
+         * LG: TODO check this, seems very suspicious
          */
         emm_sap_t                               emm_sap = {0};
 

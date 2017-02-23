@@ -54,7 +54,7 @@
 
 #include "hashtable.h"
 #include "obj_hashtable.h"
-#include "mme_scenario_player.h"
+#include "common_types.h"
 #include "3gpp_23.003.h"
 #include "3gpp_24.008.h"
 #include "3gpp_33.401.h"
@@ -63,7 +63,7 @@
 #include "3gpp_36.331.h"
 #include "3gpp_24.301.h"
 #include "security_types.h"
-#include "common_types.h"
+#include "mme_scenario_player.h"
 #include "emm_msg.h"
 #include "esm_msg.h"
 #include "intertask_interface.h"

@@ -92,8 +92,16 @@ typedef enum {
 typedef struct emm_reg_attach_s {
   bool is_emergency;   /* true if the UE was attempting to register to
              * the network for emergency services only  */
-  struct nas_emm_attach_proc_s *attach_proc;
+  struct nas_emm_attach_proc_s *proc;
 } emm_reg_attach_t;
+
+/*
+ * EMMREG primitive for attach procedure
+ * -------------------------------------
+ */
+typedef struct emm_reg_tau_s {
+  struct nas_emm_tau_proc_s *proc;
+} emm_reg_tau_t;
 
 /*
  * EMMREG primitive for detach procedure
@@ -103,6 +111,16 @@ typedef struct emm_reg_detach_s {
   bool switch_off; /* true if the UE is switched off       */
   int type;       /* Network detach type              */
 } emm_reg_detach_t;
+
+/*
+ * EMMREG primitive for service request procedure
+ * -------------------------------------
+ */
+typedef struct emm_reg_sr_s {
+  bool is_emergency;   /* true if the UE was attempting to register to
+             * the network for emergency services only  */
+  struct nas_sr_proc_s *proc;
+} emm_reg_sr_t;
 
 /*
  * EMMREG primitive for EMM common procedures
@@ -135,7 +153,7 @@ typedef struct emm_reg_sdu_non_delivery_ho_s {
 /*
  * Structure of EMMREG-SAP primitive
  */
-typedef struct {
+typedef struct emm_reg_s {
   emm_reg_primitive_t    primitive;
   mme_ue_s1ap_id_t       ue_id;
   struct emm_context_s  *ctx;
@@ -145,6 +163,8 @@ typedef struct {
   union {
     emm_reg_attach_t     attach;
     emm_reg_detach_t     detach;
+    emm_reg_tau_t        tau;
+    emm_reg_sr_t         sr;
     emm_reg_common_t     common;
     emm_reg_ll_failure_t ll_failure;
     emm_reg_sdu_non_delivery_ho_t non_delivery_ho;

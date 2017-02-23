@@ -119,7 +119,7 @@ static int _emm_as_recv (
     nas_message_decode_status_t   * decode_status);
 
 
-static int _emm_as_establish_req (const emm_as_establish_t * msg, int *emm_cause);
+static int _emm_as_establish_req (emm_as_establish_t * msg, int *emm_cause);
 static int _emm_as_data_ind (const emm_as_data_t * msg, int *emm_cause);
 static int _emm_as_release_ind (const emm_as_release_t * const release, int *emm_cause);
 
@@ -589,7 +589,7 @@ static int _emm_as_data_ind (const emm_as_data_t * msg, int *emm_cause)
  **      Others:    None                                       **
  **                                                                        **
  ***************************************************************************/
-static int _emm_as_establish_req (const emm_as_establish_t * msg, int *emm_cause)
+static int _emm_as_establish_req (emm_as_establish_t * msg, int *emm_cause)
 {
   OAILOG_FUNC_IN (LOG_NAS_EMM);
   struct emm_context_s                   *emm_ctx = NULL;

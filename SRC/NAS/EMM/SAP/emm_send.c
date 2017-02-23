@@ -51,7 +51,11 @@
 #include "log.h"
 #include "assertions.h"
 #include "commonDef.h"
+#include "common_types.h"
 #include "common_defs.h"
+#include "3gpp_24.007.h"
+#include "3gpp_24.008.h"
+#include "3gpp_29.274.h"
 #include "3gpp_24.301.h"
 #include "emm_msgDef.h"
 #include "emm_proc.h"
@@ -602,11 +606,11 @@ emm_send_identity_request (
    */
   size += IDENTITY_TYPE_2_IE_MAX_LENGTH;
 
-  if (msg->ident_type == EMM_IDENT_TYPE_IMSI) {
+  if (msg->ident_type == IDENTITY_TYPE_2_IMSI) {
     emm_msg->identitytype = IDENTITY_TYPE_2_IMSI;
-  } else if (msg->ident_type == EMM_IDENT_TYPE_TMSI) {
+  } else if (msg->ident_type == IDENTITY_TYPE_2_TMSI) {
     emm_msg->identitytype = IDENTITY_TYPE_2_TMSI;
-  } else if (msg->ident_type == EMM_IDENT_TYPE_IMEI) {
+  } else if (msg->ident_type == IDENTITY_TYPE_2_IMEI) {
     emm_msg->identitytype = IDENTITY_TYPE_2_IMEI;
   } else {
     /*

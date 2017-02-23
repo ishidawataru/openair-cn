@@ -123,11 +123,11 @@ int mme_app_handle_s6a_update_location_ans (
   }
 
   IMSI_STRING_TO_IMSI64 ((char *)ula_pP->imsi, &imsi64);
-  OAILOG_DEBUG (LOG_MME_APP, "%s Handling imsi " IMSI_64_FMT "\n", __FUNCTION__, imsi64);
+  OAILOG_DEBUG (LOG_MME_APP, "Handling imsi %s\n", ula_pP->imsi);
 
   if ((ue_mm_context = mme_ue_context_exists_imsi (&mme_app_desc.mme_ue_contexts, imsi64)) == NULL) {
     OAILOG_ERROR (LOG_MME_APP, "That's embarrassing as we don't know this IMSI\n");
-    MSC_LOG_EVENT (MSC_MMEAPP_MME, "0 S6A_UPDATE_LOCATION unknown imsi " IMSI_64_FMT" ", imsi64);
+    MSC_LOG_EVENT (MSC_MMEAPP_MME, "0 S6A_UPDATE_LOCATION unknown imsi %s", ula_pP->imsi);
     OAILOG_FUNC_RETURN (LOG_MME_APP, RETURNerror);
   }
 
@@ -160,7 +160,7 @@ int mme_app_handle_s6a_update_location_ans (
 
     nas_pdn_config_rsp = &message_p->ittiMsg.nas_pdn_config_rsp;
     nas_pdn_config_rsp->ue_id = ue_mm_context->mme_ue_s1ap_id;
-    MSC_LOG_TX_MESSAGE (MSC_MMEAPP_MME, MSC_NAS_MME, NULL, 0, "0 NAS_PDN_CONFIG_RESP imsi " IMSI_64_FMT, ue_mm_context->_imsi64);
+    MSC_LOG_TX_MESSAGE (MSC_MMEAPP_MME, MSC_NAS_MME, NULL, 0, "0 NAS_PDN_CONFIG_RESP imsi %s", ula_pP->imsi);
     rc =  itti_send_msg_to_task (TASK_NAS_MME, INSTANCE_DEFAULT, message_p);
   }
   OAILOG_FUNC_RETURN (LOG_MME_APP, rc);

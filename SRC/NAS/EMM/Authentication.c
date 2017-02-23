@@ -198,7 +198,7 @@ emm_proc_authentication_ksi (
       auth_proc->ue_id                                         = ue_id;
       ((nas_base_proc_t *)auth_proc)->parent                   = (nas_base_proc_t*)emm_specific_proc;
       auth_proc->emm_com_proc.emm_proc.delivered               = NULL;
-      auth_proc->emm_com_proc.emm_proc.previous_emm_fsm_state  = emm_context->_emm_fsm_state;
+      auth_proc->emm_com_proc.emm_proc.previous_emm_fsm_state  = emm_fsm_get_state(emm_context);
       auth_proc->emm_com_proc.emm_proc.not_delivered           = _authentication_ll_failure;
       auth_proc->emm_com_proc.emm_proc.not_delivered_ho        = _authentication_non_delivered_ho;
       auth_proc->emm_com_proc.emm_proc.base_proc.success_notif = success;
@@ -261,7 +261,7 @@ emm_proc_authentication (
     auth_proc->ue_id                                         = ue_id;
     ((nas_base_proc_t *)auth_proc)->parent                   = (nas_base_proc_t*)emm_specific_proc;
     auth_proc->emm_com_proc.emm_proc.delivered               = NULL;
-    auth_proc->emm_com_proc.emm_proc.previous_emm_fsm_state  = emm_context->_emm_fsm_state;
+    auth_proc->emm_com_proc.emm_proc.previous_emm_fsm_state  = emm_fsm_get_state(emm_context);
     auth_proc->emm_com_proc.emm_proc.not_delivered           = NULL;
     auth_proc->emm_com_proc.emm_proc.not_delivered_ho        = NULL;
     auth_proc->emm_com_proc.emm_proc.base_proc.success_notif = success;

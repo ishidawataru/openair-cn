@@ -64,8 +64,6 @@
 /****************************************************************************/
 
 
-#define EMM_FSM_NB_UE_MAX   (MME_API_NB_UE_MAX + 1)
-
 /****************************************************************************/
 /*******************  L O C A L    D E F I N I T I O N S  *******************/
 /****************************************************************************/
@@ -116,18 +114,12 @@ static const char                      * const _emm_fsm_status_str[EMM_STATE_MAX
 */
 
 /* Type of the EPS Mobility Management state machine handler */
-typedef int                             (
-  *emm_fsm_handler_t)                     (
-  const emm_reg_t *);
+typedef int (*emm_fsm_handler_t)(emm_reg_t *const);
 
-int                                     EmmDeregistered (
-  const emm_reg_t *);
-int                                     EmmRegistered (
-  const emm_reg_t *);
-int                                     EmmDeregisteredInitiated (
-  const emm_reg_t *);
-int                                     EmmCommonProcedureInitiated (
-  const emm_reg_t *);
+int EmmDeregistered (emm_reg_t * const);
+int EmmRegistered (emm_reg_t * const);
+int EmmDeregisteredInitiated (emm_reg_t * const);
+int EmmCommonProcedureInitiated (emm_reg_t * const);
 
 /* EMM state machine handlers */
 static const emm_fsm_handler_t          _emm_fsm_handlers[EMM_STATE_MAX] = {
@@ -261,9 +253,7 @@ emm_fsm_get_state_str (const struct emm_context_s * const emm_context)
  **      Others:    None                                       **
  **                                                                        **
  ***************************************************************************/
-int
-emm_fsm_process (
-  const emm_reg_t * evt)
+int emm_fsm_process (struct emm_reg_s * const evt)
 {
   int                                     rc = RETURNerror;
   emm_fsm_state_t                         state;

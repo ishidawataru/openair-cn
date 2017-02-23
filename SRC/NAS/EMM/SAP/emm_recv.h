@@ -91,7 +91,7 @@ int emm_recv_attach_request (
     const mme_ue_s1ap_id_t                     ueid,
     const tai_t                        * const originating_tai,
     const ecgi_t                       * const originating_ecgi,
-    const attach_request_msg           * const msg,
+    attach_request_msg                 * const msg,
     const bool                                 is_initial,
     int                                * const emm_cause,
     const nas_message_decode_status_t  * const decode_status);
@@ -120,6 +120,7 @@ int emm_recv_service_request(
     mme_ue_s1ap_id_t                           ueid,
     enb_ue_s1ap_id_t                           enb_ue_s1ap_id,
     const service_request_msg                 *msg,
+    const bool                                 is_initial,
     int                                * const emm_cause,
     const nas_message_decode_status_t  * const decode_status);
 

@@ -87,7 +87,7 @@
 /*
    Timer handlers
 */
-static void *_default_eps_bearer_activate_t3485_handler (void *);
+static void _default_eps_bearer_activate_t3485_handler (void *);
 
 /* Maximum value of the activate default EPS bearer context request
    retransmission counter */
@@ -443,7 +443,7 @@ int esm_proc_default_eps_bearer_context_failure (emm_context_t * emm_context, pd
  **      Others:    None                                       **
  **                                                                        **
  ***************************************************************************/
-static void *_default_eps_bearer_activate_t3485_handler (void *args)
+static void _default_eps_bearer_activate_t3485_handler (void *args)
 {
   OAILOG_FUNC_IN (LOG_NAS_ESM);
   int                                     rc;
@@ -494,7 +494,7 @@ static void *_default_eps_bearer_activate_t3485_handler (void *args)
     free_wrapper ((void**)&esm_ebr_timer_data);
   }
 
-  OAILOG_FUNC_RETURN (LOG_NAS_ESM, NULL);
+  OAILOG_FUNC_OUT (LOG_NAS_ESM);
 }
 
 /*

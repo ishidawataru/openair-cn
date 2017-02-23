@@ -243,14 +243,14 @@ emm_proc_security_mode_control (
      */
     ((nas_base_proc_t *)smc_proc)->parent                   = (nas_base_proc_t*)emm_specific_proc;
     smc_proc->emm_com_proc.emm_proc.delivered               = NULL;
-    smc_proc->emm_com_proc.emm_proc.previous_emm_fsm_state  = emm_ctx->_emm_fsm_state;
+    smc_proc->emm_com_proc.emm_proc.previous_emm_fsm_state  = emm_fsm_get_state(emm_ctx);
     smc_proc->emm_com_proc.emm_proc.not_delivered           = _security_ll_failure;
     smc_proc->emm_com_proc.emm_proc.not_delivered_ho        = _security_non_delivered_ho;
     smc_proc->emm_com_proc.emm_proc.base_proc.success_notif = success;
     smc_proc->emm_com_proc.emm_proc.base_proc.failure_notif = failure;
     smc_proc->emm_com_proc.emm_proc.base_proc.abort         = _security_abort;
     smc_proc->emm_com_proc.emm_proc.base_proc.fail_in       = NULL; // only response
-    smc_proc->emm_com_proc.emm_proc.base_proc.fail_out      = _security_reject;
+    smc_proc->emm_com_proc.emm_proc.base_proc.fail_out      = NULL;
     smc_proc->emm_com_proc.emm_proc.base_proc.time_out      = _security_t3460_handler;
 
     /*

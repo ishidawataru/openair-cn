@@ -92,7 +92,7 @@ typedef struct emm_attach_request_ies_s {
   nas_message_decode_status_t    decode_status;
 } emm_attach_request_ies_t;
 
-typedef struct emm_detach_request_params_s {
+typedef struct emm_detach_request_ies_s {
   emm_proc_detach_type_t         type;
   bool                           switch_off;
   bool                           is_native_sc;
@@ -101,9 +101,9 @@ typedef struct emm_detach_request_params_s {
   imsi_t                       * imsi;
   imei_t                       * imei;
   nas_message_decode_status_t    decode_status;
-} emm_detach_request_params_t;
+} emm_detach_request_ies_t;
 
-typedef struct emm_tau_request_params_s {
+typedef struct emm_tau_request_ies_s {
   bool                           is_initial;
   emm_proc_attach_type_t         type;
   EpsUpdateType                  eps_update_type;
@@ -117,9 +117,9 @@ typedef struct emm_tau_request_params_s {
   guti_t                        *additional_guti;
   ue_network_capability_t       *ue_network_capability;
   tai_t                         *last_visited_registered_tai;
-  drx_parameter_t               *drxparameter;
+  drx_parameter_t               *drx_parameter;
   bool                           is_ue_radio_capability_information_update_needed;
-  eps_bearer_context_status_t   *epsbearercontextstatus;
+  eps_bearer_context_status_t   *eps_bearer_context_status;
   ms_network_capability_t       *ms_network_capability;
   tmsi_status_t                 *tmsi_status;
   mobile_station_classmark2_t   *mobile_station_classmark2;
@@ -129,7 +129,7 @@ typedef struct emm_tau_request_params_s {
   guti_type_t                   *old_guti_type;
 
   nas_message_decode_status_t    decode_status;
-} emm_tau_request_params_t;
+} emm_tau_request_ies_t;
 /****************************************************************************/
 /********************  G L O B A L    V A R I A B L E S  ********************/
 /****************************************************************************/
@@ -182,11 +182,12 @@ int emm_proc_attach_complete (
   int                               emm_cause,
   const nas_message_decode_status_t status);
 
-int  emm_proc_tracking_area_update_request (
+void free_emm_tau_request_ies(emm_tau_request_ies_t ** const ies);
+
+int emm_proc_tracking_area_update_request (
         const mme_ue_s1ap_id_t ue_id,
-        tracking_area_update_request_msg * const msg,
-        int *emm_cause,
-        const nas_message_decode_status_t  * decode_status);
+        emm_tau_request_ies_t *const ies,
+        int *emm_cause);
 
 int emm_proc_tracking_area_update_reject (
         const mme_ue_s1ap_id_t ue_id,
@@ -199,8 +200,10 @@ int emm_proc_service_reject (mme_ue_s1ap_id_t ue_id, enb_ue_s1ap_id_t enb_ue_s1a
  * --------------------------------------------------------------------------
  */
 
+void free_emm_detach_request_ies(emm_detach_request_ies_t ** const ies);
+
 int emm_proc_detach(mme_ue_s1ap_id_t ue_id, emm_proc_detach_type_t type);
-int emm_proc_detach_request(mme_ue_s1ap_id_t ue_id, emm_detach_request_params_t * params);
+int emm_proc_detach_request(mme_ue_s1ap_id_t ue_id, emm_detach_request_ies_t * params);
 
 /*
  * --------------------------------------------------------------------------

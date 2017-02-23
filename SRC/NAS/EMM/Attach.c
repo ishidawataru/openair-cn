@@ -299,7 +299,7 @@ emm_proc_attach_request (
       emm_sap.u.emm_reg.ctx = &ue_mm_context->emm_context;
       emm_sap.u.emm_reg.notify = false;
       emm_sap.u.emm_reg.free_proc = false;
-      emm_sap.u.emm_reg.u.attach.attach_proc = &dummy_attach_proc;
+      emm_sap.u.emm_reg.u.attach.proc = &dummy_attach_proc;
       emm_sap.u.emm_reg.u.attach.is_emergency = true;
       rc = emm_sap_send (&emm_sap);
 
@@ -346,7 +346,7 @@ emm_proc_attach_request (
                 emm_sap.u.emm_reg.ctx   = &ue_mm_context->emm_context;
                 emm_sap.u.emm_reg.notify= true;
                 emm_sap.u.emm_reg.free_proc = true;
-                emm_sap.u.emm_reg.u.attach.attach_proc   = attach_proc;
+                emm_sap.u.emm_reg.u.attach.proc   = attach_proc;
                 rc = emm_sap_send (&emm_sap);
                 _emm_proc_create_procedure_attach_request(ue_mm_context, ies);
               } else {
@@ -382,7 +382,7 @@ emm_proc_attach_request (
           emm_sap.u.emm_reg.ctx   = &ue_mm_context->emm_context;
           emm_sap.u.emm_reg.notify= true;
           emm_sap.u.emm_reg.free_proc = true;
-          emm_sap.u.emm_reg.u.attach.attach_proc   = attach_proc;
+          emm_sap.u.emm_reg.u.attach.proc   = attach_proc;
           rc = emm_sap_send (&emm_sap);
 
           if (duplicate_enb_context_detected) {
@@ -427,7 +427,7 @@ emm_proc_attach_request (
           emm_sap.u.emm_reg.ctx       = &ue_mm_context->emm_context;
           emm_sap.u.emm_reg.notify    = false;
           emm_sap.u.emm_reg.free_proc = true;
-          emm_sap.u.emm_reg.u.attach.attach_proc = attach_proc;
+          emm_sap.u.emm_reg.u.attach.proc = attach_proc;
           rc = emm_sap_send (&emm_sap);
 
           if (duplicate_enb_context_detected) {
@@ -536,7 +536,7 @@ int emm_proc_attach_reject (mme_ue_s1ap_id_t ue_id, emm_cause_t emm_cause)
       emm_sap.u.emm_reg.ctx = &ue_mm_context->emm_context;
       emm_sap.u.emm_reg.notify = false;
       emm_sap.u.emm_reg.free_proc = true;
-      emm_sap.u.emm_reg.u.attach.attach_proc = attach_proc;
+      emm_sap.u.emm_reg.u.attach.proc = attach_proc;
       rc = emm_sap_send (&emm_sap);
     }
   }
@@ -636,7 +636,7 @@ int emm_proc_attach_complete (
     emm_sap.u.emm_reg.ctx = &ue_mm_context->emm_context;
     emm_sap.u.emm_reg.notify = true;
     emm_sap.u.emm_reg.free_proc = true;
-    emm_sap.u.emm_reg.u.attach.attach_proc = attach_proc;
+    emm_sap.u.emm_reg.u.attach.proc = attach_proc;
     MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "0 EMMREG_ATTACH_CNF ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
     rc = emm_sap_send (&emm_sap);
   } else if (esm_sap.err != ESM_SAP_DISCARDED) {
@@ -648,7 +648,7 @@ int emm_proc_attach_complete (
     emm_sap.u.emm_reg.ctx = &ue_mm_context->emm_context;
     emm_sap.u.emm_reg.notify = true;
     emm_sap.u.emm_reg.free_proc = true;
-    emm_sap.u.emm_reg.u.attach.attach_proc = attach_proc;
+    emm_sap.u.emm_reg.u.attach.proc = attach_proc;
     rc = emm_sap_send (&emm_sap);
   } else {
     /*
@@ -669,16 +669,13 @@ int emm_proc_attach_complete (
 
 static void _emm_proc_create_procedure_attach_request(ue_mm_context_t * const ue_mm_context, emm_attach_request_ies_t * const ies)
 {
-  if (!ue_mm_context->emm_context.emm_procedures) {
-    int rc = nas_new_attach_procedure(&ue_mm_context->emm_context);
-    AssertFatal(RETURNok == rc, "Handle this");
-    nas_emm_attach_proc_t *attach_proc = get_nas_specific_procedure_attach (&ue_mm_context->emm_context);
-    if ((attach_proc)) {
-      attach_proc->ies = ies;
-      ((nas_base_proc_t*)attach_proc)->abort = _emm_attach_abort;
-      ((nas_base_proc_t*)attach_proc)->fail_in = NULL; // No parent procedure
-      ((nas_base_proc_t*)attach_proc)->time_out = _emm_attach_t3450_handler;
-    }
+  nas_emm_attach_proc_t *attach_proc = nas_new_attach_procedure(&ue_mm_context->emm_context);
+  AssertFatal(attach_proc, "TODO Handle this");
+  if ((attach_proc)) {
+    attach_proc->ies = ies;
+    ((nas_base_proc_t*)attach_proc)->abort = _emm_attach_abort;
+    ((nas_base_proc_t*)attach_proc)->fail_in = NULL; // No parent procedure
+    ((nas_base_proc_t*)attach_proc)->time_out = _emm_attach_t3450_handler;
   }
 }
 /*
@@ -742,7 +739,7 @@ static void _emm_attach_t3450_handler (void *args)
       emm_sap.u.emm_reg.ctx   = emm_context;
       emm_sap.u.emm_reg.notify= true;
       emm_sap.u.emm_reg.free_proc = true;
-      emm_sap.u.emm_reg.u.attach.attach_proc   = attach_proc;
+      emm_sap.u.emm_reg.u.attach.proc   = attach_proc;
       MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "0 EMMREG_ATTACH_ABORT ue id " MME_UE_S1AP_ID_FMT " ", attach_proc->ue_id);
       emm_sap_send (&emm_sap);
     }
@@ -902,7 +899,7 @@ static int _emm_attach_abort (struct emm_context_s* emm_context, struct nas_base
     emm_sap.u.emm_reg.ctx = emm_context;
     emm_sap.u.emm_reg.notify = true;
     emm_sap.u.emm_reg.free_proc = true;
-    emm_sap.u.emm_reg.u.attach.attach_proc = attach_proc;
+    emm_sap.u.emm_reg.u.attach.proc = attach_proc;
     rc = emm_sap_send (&emm_sap);
   }
 
@@ -1006,7 +1003,7 @@ static int _emm_attach_failure_authentication_cb (emm_context_t *emm_context)
     emm_sap.u.emm_reg.ctx                  = emm_context;
     emm_sap.u.emm_reg.notify               = true;
     emm_sap.u.emm_reg.free_proc            = true;
-    emm_sap.u.emm_reg.u.attach.attach_proc = attach_proc;
+    emm_sap.u.emm_reg.u.attach.proc = attach_proc;
     // dont care emm_sap.u.emm_reg.u.attach.is_emergency = false;
     rc = emm_sap_send (&emm_sap);
   }
@@ -1042,7 +1039,7 @@ static int _emm_start_attach_proc_security (emm_context_t *emm_context, nas_emm_
       emm_sap.u.emm_reg.ctx                  = emm_context;
       emm_sap.u.emm_reg.notify               = true;
       emm_sap.u.emm_reg.free_proc            = true;
-      emm_sap.u.emm_reg.u.attach.attach_proc = attach_proc;
+      emm_sap.u.emm_reg.u.attach.proc = attach_proc;
       // dont care emm_sap.u.emm_reg.u.attach.is_emergency = false;
       rc = emm_sap_send (&emm_sap);
     }
@@ -1180,7 +1177,7 @@ static int _emm_attach_security (emm_context_t *emm_context)
       emm_sap.u.emm_reg.ctx                  = emm_context;
       emm_sap.u.emm_reg.notify               = true;
       emm_sap.u.emm_reg.free_proc            = true;
-      emm_sap.u.emm_reg.u.attach.attach_proc = attach_proc;
+      emm_sap.u.emm_reg.u.attach.proc = attach_proc;
       // dont care emm_sap.u.emm_reg.u.attach.is_emergency = false;
       rc = emm_sap_send (&emm_sap);
     }

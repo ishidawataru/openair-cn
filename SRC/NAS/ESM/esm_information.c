@@ -85,7 +85,7 @@
 /*
    Timer handlers
 */
-static void *_esm_information_t3489_handler (void *);
+static void _esm_information_t3489_handler (void *);
 
 /* Maximum value of the deactivate EPS bearer context request
    retransmission counter */
@@ -200,7 +200,7 @@ int esm_proc_esm_information_response (emm_context_t * ue_context, pti_t pti, co
  **      Others:    None                                       **
  **                                                                        **
  ***************************************************************************/
-static void *_esm_information_t3489_handler (void *args)
+static void _esm_information_t3489_handler (void *args)
 {
   OAILOG_FUNC_IN (LOG_NAS_ESM);
 
@@ -240,7 +240,7 @@ static void *_esm_information_t3489_handler (void *args)
     }
   }
 
-  OAILOG_FUNC_RETURN (LOG_NAS_ESM, NULL);
+  OAILOG_FUNC_OUT (LOG_NAS_ESM);
 }
 
 /*

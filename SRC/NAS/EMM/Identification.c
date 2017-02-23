@@ -160,7 +160,7 @@ emm_proc_identification (
       ident_proc->ue_id                                         = ue_id;
       ((nas_base_proc_t *)ident_proc)->parent                   = (nas_base_proc_t*)emm_proc;
       ident_proc->emm_com_proc.emm_proc.delivered               = NULL;
-      ident_proc->emm_com_proc.emm_proc.previous_emm_fsm_state  = emm_context->_emm_fsm_state;
+      ident_proc->emm_com_proc.emm_proc.previous_emm_fsm_state  = emm_fsm_get_state(emm_context);
       ident_proc->emm_com_proc.emm_proc.not_delivered           = _identification_ll_failure;
       ident_proc->emm_com_proc.emm_proc.not_delivered_ho        = _identification_non_delivered_ho;
       ident_proc->emm_com_proc.emm_proc.base_proc.success_notif = success;
