@@ -297,120 +297,120 @@ emm_msg_encode (
   len -= header_result;
 
   switch (msg->header.message_type) {
-  case EMM_INFORMATION:
-    encode_result = encode_emm_information (&msg->emm_information, buffer, len);
-    break;
-
-  case UPLINK_NAS_TRANSPORT:
-    encode_result = encode_uplink_nas_transport (&msg->uplink_nas_transport, buffer, len);
-    break;
-
-  case AUTHENTICATION_REJECT:
-    encode_result = encode_authentication_reject (&msg->authentication_reject, buffer, len);
-    break;
-
-  case AUTHENTICATION_FAILURE:
-    encode_result = encode_authentication_failure (&msg->authentication_failure, buffer, len);
-    break;
-
-  case DETACH_ACCEPT:
-    encode_result = encode_detach_accept (&msg->detach_accept, buffer, len);
-    break;
-
-  case SERVICE_REJECT:
-    encode_result = encode_service_reject (&msg->service_reject, buffer, len);
-    break;
-
-  case AUTHENTICATION_REQUEST:
-    encode_result = encode_authentication_request (&msg->authentication_request, buffer, len);
-    break;
-
-  case TRACKING_AREA_UPDATE_REQUEST:
-    encode_result = encode_tracking_area_update_request (&msg->tracking_area_update_request, buffer, len);
-    break;
-
-  case ATTACH_REQUEST:
-    encode_result = encode_attach_request (&msg->attach_request, buffer, len);
-    break;
-
-  case EMM_STATUS:
-    encode_result = encode_emm_status (&msg->emm_status, buffer, len);
-    break;
-
-  case IDENTITY_RESPONSE:
-    encode_result = encode_identity_response (&msg->identity_response, buffer, len);
-    break;
-
-  case IDENTITY_REQUEST:
-    encode_result = encode_identity_request (&msg->identity_request, buffer, len);
-    break;
-
-  case GUTI_REALLOCATION_COMMAND:
-    encode_result = encode_guti_reallocation_command (&msg->guti_reallocation_command, buffer, len);
-    break;
-
-  case TRACKING_AREA_UPDATE_REJECT:
-    encode_result = encode_tracking_area_update_reject (&msg->tracking_area_update_reject, buffer, len);
-    break;
-
   case ATTACH_ACCEPT:
     encode_result = encode_attach_accept (&msg->attach_accept, buffer, len);
-    break;
-
-  case SECURITY_MODE_COMPLETE:
-    encode_result = encode_security_mode_complete (&msg->security_mode_complete, buffer, len);
-    break;
-
-  case TRACKING_AREA_UPDATE_ACCEPT:
-    encode_result = encode_tracking_area_update_accept (&msg->tracking_area_update_accept, buffer, len);
-    break;
-
-  case ATTACH_REJECT:
-    encode_result = encode_attach_reject (&msg->attach_reject, buffer, len);
     break;
 
   case ATTACH_COMPLETE:
     encode_result = encode_attach_complete (&msg->attach_complete, buffer, len);
     break;
 
-  case TRACKING_AREA_UPDATE_COMPLETE:
-    encode_result = encode_tracking_area_update_complete (&msg->tracking_area_update_complete, buffer, len);
+  case ATTACH_REJECT:
+    encode_result = encode_attach_reject (&msg->attach_reject, buffer, len);
     break;
 
-  case CS_SERVICE_NOTIFICATION:
-    encode_result = encode_cs_service_notification (&msg->cs_service_notification, buffer, len);
+  case ATTACH_REQUEST:
+    encode_result = encode_attach_request (&msg->attach_request, buffer, len);
     break;
 
-  case SECURITY_MODE_REJECT:
-    encode_result = encode_security_mode_reject (&msg->security_mode_reject, buffer, len);
+  case AUTHENTICATION_FAILURE:
+    encode_result = encode_authentication_failure (&msg->authentication_failure, buffer, len);
     break;
 
-  case DETACH_REQUEST:
-    encode_result = encode_detach_request (&msg->detach_request, buffer, len);
+  case AUTHENTICATION_REJECT:
+    encode_result = encode_authentication_reject (&msg->authentication_reject, buffer, len);
     break;
 
-  case GUTI_REALLOCATION_COMPLETE:
-    encode_result = encode_guti_reallocation_complete (&msg->guti_reallocation_complete, buffer, len);
-    break;
-
-  case SECURITY_MODE_COMMAND:
-    encode_result = encode_security_mode_command (&msg->security_mode_command, buffer, len);
-    break;
-
-  case DOWNLINK_NAS_TRANSPORT:
-    encode_result = encode_downlink_nas_transport (&msg->downlink_nas_transport, buffer, len);
-    break;
-
-  case EXTENDED_SERVICE_REQUEST:
-    encode_result = encode_extended_service_request (&msg->extended_service_request, buffer, len);
+  case AUTHENTICATION_REQUEST:
+    encode_result = encode_authentication_request (&msg->authentication_request, buffer, len);
     break;
 
   case AUTHENTICATION_RESPONSE:
     encode_result = encode_authentication_response (&msg->authentication_response, buffer, len);
     break;
 
+  case CS_SERVICE_NOTIFICATION:
+    encode_result = encode_cs_service_notification (&msg->cs_service_notification, buffer, len);
+    break;
+
+  case DETACH_ACCEPT:
+    encode_result = encode_detach_accept (&msg->detach_accept, buffer, len);
+    break;
+
+  case DETACH_REQUEST:
+    encode_result = encode_detach_request (&msg->detach_request, buffer, len);
+    break;
+
+  case DOWNLINK_NAS_TRANSPORT:
+    encode_result = encode_downlink_nas_transport (&msg->downlink_nas_transport, buffer, len);
+    break;
+
+  case EMM_INFORMATION:
+    encode_result = encode_emm_information (&msg->emm_information, buffer, len);
+    break;
+
+  case EMM_STATUS:
+    encode_result = encode_emm_status (&msg->emm_status, buffer, len);
+    break;
+
+  case EXTENDED_SERVICE_REQUEST:
+    encode_result = encode_extended_service_request (&msg->extended_service_request, buffer, len);
+    break;
+
+  case GUTI_REALLOCATION_COMMAND:
+    encode_result = encode_guti_reallocation_command (&msg->guti_reallocation_command, buffer, len);
+    break;
+
+  case GUTI_REALLOCATION_COMPLETE:
+    encode_result = encode_guti_reallocation_complete (&msg->guti_reallocation_complete, buffer, len);
+    break;
+
+  case IDENTITY_REQUEST:
+    encode_result = encode_identity_request (&msg->identity_request, buffer, len);
+    break;
+
+  case IDENTITY_RESPONSE:
+    encode_result = encode_identity_response (&msg->identity_response, buffer, len);
+    break;
+
+  case SECURITY_MODE_COMMAND:
+    encode_result = encode_security_mode_command (&msg->security_mode_command, buffer, len);
+    break;
+
+  case SECURITY_MODE_COMPLETE:
+    encode_result = encode_security_mode_complete (&msg->security_mode_complete, buffer, len);
+    break;
+
+  case SECURITY_MODE_REJECT:
+    encode_result = encode_security_mode_reject (&msg->security_mode_reject, buffer, len);
+    break;
+
+  case SERVICE_REJECT:
+    encode_result = encode_service_reject (&msg->service_reject, buffer, len);
+    break;
+
   case SERVICE_REQUEST:
     encode_result = encode_service_request (&msg->service_request, buffer, len);
+    break;
+
+  case TRACKING_AREA_UPDATE_ACCEPT:
+    encode_result = encode_tracking_area_update_accept (&msg->tracking_area_update_accept, buffer, len);
+    break;
+
+  case TRACKING_AREA_UPDATE_COMPLETE:
+    encode_result = encode_tracking_area_update_complete (&msg->tracking_area_update_complete, buffer, len);
+    break;
+
+  case TRACKING_AREA_UPDATE_REJECT:
+    encode_result = encode_tracking_area_update_reject (&msg->tracking_area_update_reject, buffer, len);
+    break;
+
+  case TRACKING_AREA_UPDATE_REQUEST:
+    encode_result = encode_tracking_area_update_request (&msg->tracking_area_update_request, buffer, len);
+    break;
+
+  case UPLINK_NAS_TRANSPORT:
+    encode_result = encode_uplink_nas_transport (&msg->uplink_nas_transport, buffer, len);
     break;
 
   default:
