@@ -89,8 +89,8 @@ int nas_proc_establish_ind( const enb_s1ap_id_key_t enb_ue_s1ap_id_key,
                             const s_tmsi_t s_tmsi,
                             STOLEN_REF bstring *msg);
 
-int nas_proc_dl_transfer_cnf(const mme_ue_s1ap_id_t ueid, const nas_error_code_t status);
-int nas_proc_dl_transfer_rej(const mme_ue_s1ap_id_t ueid, const nas_error_code_t status);
+int nas_proc_dl_transfer_cnf(const mme_ue_s1ap_id_t ueid, const nas_error_code_t status, STOLEN_REF bstring *  nas_msg);
+int nas_proc_dl_transfer_rej(const mme_ue_s1ap_id_t ueid, const nas_error_code_t status, STOLEN_REF bstring *  nas_msg);
 int nas_proc_ul_transfer_ind(const mme_ue_s1ap_id_t ueid,
                              const tai_t originating_tai,
                              const ecgi_t cgi,

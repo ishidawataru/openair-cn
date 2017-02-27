@@ -645,6 +645,7 @@ static int _security_request (nas_emm_smc_proc_t * const smc_proc)
      */
     REQUIREMENT_3GPP_24_301(R10_5_4_3_2__14);
     emm_sap.primitive = EMMAS_SECURITY_REQ;
+    emm_sap.u.emm_as.u.security.puid = smc_proc->emm_com_proc.emm_proc.base_proc.nas_puid;
     emm_sap.u.emm_as.u.security.guti = NULL;
     emm_sap.u.emm_as.u.security.ue_id = smc_proc->ue_id;
     emm_sap.u.emm_as.u.security.msg_type = EMM_AS_MSG_TYPE_SMC;

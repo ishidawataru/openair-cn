@@ -101,6 +101,8 @@ typedef struct emm_as_security_s {
   const guti_t          *guti;     /* GUTI temporary mobile identity   */
   emm_as_security_data_t sctx;     /* EPS NAS security context     */
   int                    emm_cause;/* EMM failure cause code       */
+
+  uint64_t               puid;     // linked to procedure UID
   /*
    * Identity request/response
    */
@@ -154,6 +156,7 @@ typedef struct emm_as_EPS_identity_s {
 typedef struct emm_as_establish_s {
   enb_s1ap_id_key_t      enb_ue_s1ap_id_key;          /* UE lower layer identifier in eNB  */
   mme_ue_s1ap_id_t       ue_id;                       /* UE lower layer identifier         */
+  uint64_t               puid;                        /* linked to procedure UID */
   emm_as_EPS_identity_t  eps_id;                      /* UE's EPS mobile identity      */
   emm_as_security_data_t sctx;                        /* EPS NAS security context      */
   bool                   switch_off;                  /* true if the UE is switched off    */

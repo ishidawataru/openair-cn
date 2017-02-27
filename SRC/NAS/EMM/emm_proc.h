@@ -226,9 +226,6 @@ int emm_proc_identification_complete(const mme_ue_s1ap_id_t ue_id,
                             imeisv_t * const imeisv,
                             uint32_t * const tmsi);
 
-int emm_proc_identification_ll_failure (const mme_ue_s1ap_id_t ue_id);
-int emm_proc_identification_sdu_not_delivered_ho (const mme_ue_s1ap_id_t ue_id);
-
 /*
  * --------------------------------------------------------------------------
  *              Authentication procedure

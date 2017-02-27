@@ -66,6 +66,7 @@ typedef struct nas_base_proc_s {
   pdu_out_rej_t           fail_out;
   time_out_t              time_out;
   nas_base_proc_type_t    type;       // EMM, ESM, CN
+  uint64_t                nas_puid; // procedure unique identifier for internal use
 
   struct nas_base_proc_s *parent;
   struct nas_base_proc_s *child;
@@ -310,11 +311,23 @@ typedef struct nas_cn_procedure_s {
   LIST_ENTRY(nas_cn_procedure_s) entries;
 } nas_cn_procedure_t;
 
+typedef struct nas_proc_mess_sign_s {
+  uint64_t puid;
+#define NAS_MSG_DIGEST_SIZE 16
+  uint8_t  digest[NAS_MSG_DIGEST_SIZE];
+  size_t   digest_length;
+  size_t   nas_msg_length;
+} nas_proc_mess_sign_t;
+
 typedef struct emm_procedures_s {
   nas_emm_specific_proc_t     *emm_specific_proc;
   LIST_HEAD(nas_emm_common_procedures_head_s, nas_emm_common_procedure_s)  emm_common_procs;
-  LIST_HEAD(nas_cn_procedures_head_s, nas_cn_procedure_s)  cn_procs;
+  LIST_HEAD(nas_cn_procedures_head_s, nas_cn_procedure_s)  cn_procs; // triggered by EMM
   nas_emm_con_mngt_proc_t     *emm_con_mngt_proc;
+
+  int                  nas_proc_mess_sign_next_location; // next index in array
+#define MAX_NAS_PROC_MESS_SIGN 3
+  nas_proc_mess_sign_t nas_proc_mess_sign[MAX_NAS_PROC_MESS_SIGN];
 } emm_procedures_t;
 
 bool is_nas_common_procedure_guti_realloc_running(const struct emm_context_s * const ctxt);
@@ -360,5 +373,9 @@ nas_emm_ident_proc_t *nas_new_identification_procedure(struct emm_context_s * co
 nas_emm_auth_proc_t *nas_new_authentication_procedure(struct emm_context_s * const emm_context);
 nas_emm_smc_proc_t *nas_new_smc_procedure(struct emm_context_s * const emm_context);
 nas_auth_info_proc_t *nas_new_cn_auth_info_procedure(struct emm_context_s * const emm_context);
+
+void nas_digest_msg(const unsigned char * const msg, const size_t msg_len, char * const digest, /*INOUT*/ size_t * const digest_length);
+void nas_emm_procedure_register_emm_message(mme_ue_s1ap_id_t ue_id, const uint64_t puid, bstring nas_msg);
+nas_emm_proc_t * nas_emm_find_procedure_by_msg_digest(struct emm_context_s * const emm_context, const char * const digest, const size_t digest_bytes, const size_t msg_size);
 
 #endif

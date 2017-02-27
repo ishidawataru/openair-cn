@@ -40,6 +40,7 @@ sctp_itti_send_lower_layer_conf (
     const sctp_assoc_id_t assoc_id,
     const sctp_stream_id_t stream,
     const uint32_t         mme_ue_s1ap_id,
+    STOLEN_REF bstring    *payload,
     const bool             is_success)
 {
   MessageDef                             *message_p = NULL;
@@ -50,6 +51,8 @@ sctp_itti_send_lower_layer_conf (
   sctp_p->assoc_id = assoc_id;
   sctp_p->stream = stream;
   sctp_p->mme_ue_s1ap_id = mme_ue_s1ap_id;
+  sctp_p->payload    = *payload;
+  STOLEN_REF *payload= NULL;
   sctp_p->is_success = is_success;
   return itti_send_msg_to_task (origin_task_id, INSTANCE_DEFAULT, message_p);
 }

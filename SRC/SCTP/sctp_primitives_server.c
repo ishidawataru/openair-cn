@@ -650,6 +650,7 @@ static void * sctp_intertask_interface (void *args_p)
               SCTP_DATA_REQ (received_message_p).assoc_id,
               SCTP_DATA_REQ (received_message_p).stream,
               SCTP_DATA_REQ (received_message_p).mme_ue_s1ap_id,
+              &SCTP_DATA_REQ (received_message_p).payload,
               false);
         } /* NO NEED FOR CONFIRM success yet else {
           if (INVALID_MME_UE_S1AP_ID != SCTP_DATA_REQ (received_message_p).mme_ue_s1ap_id) {

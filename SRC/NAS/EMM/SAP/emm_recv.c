@@ -302,7 +302,7 @@ emm_recv_attach_request (
     memcpy(params->originating_tai, originating_tai, sizeof(tai_t));
   }
   if (originating_ecgi) {
-    params->originating_ecgi = calloc(1, sizeof(tai_t));
+    params->originating_ecgi = calloc(1, sizeof(ecgi_t));
     memcpy(params->originating_ecgi, originating_ecgi, sizeof(ecgi_t));
   }
   memcpy(&params->ue_network_capability, &msg->uenetworkcapability, sizeof(ue_network_capability_t));

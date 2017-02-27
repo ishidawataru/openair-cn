@@ -333,7 +333,7 @@ esm_ebr_context_release (
       OAILOG_FUNC_RETURN (LOG_NAS_ESM, ESM_EBI_UNASSIGNED);
     }
 
-    OAILOG_WARNING (LOG_NAS_ESM, "ESM-PROC  - Release EPS bearer context " "(ebi=%d)\n", ebi);
+    OAILOG_INFO (LOG_NAS_ESM, "ESM-PROC  - Release EPS bearer context " "(ebi=%d)\n", ebi);
 
     /*
      * Delete the TFT

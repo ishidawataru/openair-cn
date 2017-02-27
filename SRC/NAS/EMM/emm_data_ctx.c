@@ -539,10 +539,10 @@ void emm_init_context(struct emm_context_s * const emm_ctx, const bool init_esm_
 void nas_start_T3450(const mme_ue_s1ap_id_t ue_id, struct nas_timer_s * const T3450,  time_out_t time_out_cb, void *timer_callback_args)
 {
   if ((T3450) && (T3450->id == NAS_TIMER_INACTIVE_ID)) {
-    T3450->id = nas_timer_start (T3450->sec, 0, time_out_cb, &timer_callback_args);
+    T3450->id = nas_timer_start (T3450->sec, 0, time_out_cb, timer_callback_args);
     if (NAS_TIMER_INACTIVE_ID != T3450->id) {
       MSC_LOG_EVENT (MSC_NAS_EMM_MME, "0 T3450 started UE " MME_UE_S1AP_ID_FMT " ", ue_id);
-      OAILOG_DEBUG (LOG_NAS_EMM, "T3450 started UE " MME_UE_S1AP_ID_FMT " ", ue_id);
+      OAILOG_DEBUG (LOG_NAS_EMM, "T3450 started UE " MME_UE_S1AP_ID_FMT "\n", ue_id);
     } else {
       OAILOG_ERROR (LOG_NAS_EMM, "Could not start T3450 UE " MME_UE_S1AP_ID_FMT " ", ue_id);
     }
@@ -552,10 +552,10 @@ void nas_start_T3450(const mme_ue_s1ap_id_t ue_id, struct nas_timer_s * const T3
 void nas_start_T3460(const mme_ue_s1ap_id_t ue_id, struct nas_timer_s * const T3460,  time_out_t time_out_cb, void *timer_callback_args)
 {
   if ((T3460) && (T3460->id == NAS_TIMER_INACTIVE_ID)) {
-    T3460->id = nas_timer_start (T3460->sec, 0, time_out_cb, &timer_callback_args);
+    T3460->id = nas_timer_start (T3460->sec, 0, time_out_cb, timer_callback_args);
     if (NAS_TIMER_INACTIVE_ID != T3460->id) {
       MSC_LOG_EVENT (MSC_NAS_EMM_MME, "0 T3460 started UE " MME_UE_S1AP_ID_FMT " ", ue_id);
-      OAILOG_DEBUG (LOG_NAS_EMM, "T3460 started UE " MME_UE_S1AP_ID_FMT " ", ue_id);
+      OAILOG_DEBUG (LOG_NAS_EMM, "T3460 started UE " MME_UE_S1AP_ID_FMT "\n", ue_id);
     } else {
       OAILOG_ERROR (LOG_NAS_EMM, "Could not start T3460 UE " MME_UE_S1AP_ID_FMT " ", ue_id);
     }
@@ -565,10 +565,10 @@ void nas_start_T3460(const mme_ue_s1ap_id_t ue_id, struct nas_timer_s * const T3
 void nas_start_T3470(const mme_ue_s1ap_id_t ue_id, struct nas_timer_s * const T3470,  time_out_t time_out_cb, void *timer_callback_args)
 {
   if ((T3470) && (T3470->id == NAS_TIMER_INACTIVE_ID)) {
-    T3470->id = nas_timer_start (T3470->sec, 0, time_out_cb, &timer_callback_args);
+    T3470->id = nas_timer_start (T3470->sec, 0, time_out_cb, timer_callback_args);
     if (NAS_TIMER_INACTIVE_ID != T3470->id) {
       MSC_LOG_EVENT (MSC_NAS_EMM_MME, "0 T3470 started UE " MME_UE_S1AP_ID_FMT " ", ue_id);
-      OAILOG_DEBUG (LOG_NAS_EMM, "T3470 started UE " MME_UE_S1AP_ID_FMT " ", ue_id);
+      OAILOG_DEBUG (LOG_NAS_EMM, "T3470 started UE " MME_UE_S1AP_ID_FMT "\n", ue_id);
     } else {
       OAILOG_ERROR (LOG_NAS_EMM, "Could not start T3470 UE " MME_UE_S1AP_ID_FMT " ", ue_id);
     }
@@ -580,7 +580,7 @@ void nas_stop_T3450(const mme_ue_s1ap_id_t ue_id, struct nas_timer_s * const T34
   if ((T3450) && (T3450->id != NAS_TIMER_INACTIVE_ID)) {
     T3450->id = nas_timer_stop(T3450->id, &timer_callback_args);
     MSC_LOG_EVENT (MSC_NAS_EMM_MME, "0 T3450 stopped UE " MME_UE_S1AP_ID_FMT " ", ue_id);
-    OAILOG_DEBUG (LOG_NAS_EMM, "T3450 stopped UE " MME_UE_S1AP_ID_FMT " ", ue_id);
+    OAILOG_DEBUG (LOG_NAS_EMM, "T3450 stopped UE " MME_UE_S1AP_ID_FMT "\n", ue_id);
   }
 }
 
@@ -590,7 +590,7 @@ void nas_stop_T3460(const mme_ue_s1ap_id_t ue_id, struct nas_timer_s * const T34
   if ((T3460) && (T3460->id != NAS_TIMER_INACTIVE_ID)) {
     T3460->id = nas_timer_stop(T3460->id, &timer_callback_args);
     MSC_LOG_EVENT (MSC_NAS_EMM_MME, "0 T3460 stopped UE " MME_UE_S1AP_ID_FMT " ", ue_id);
-    OAILOG_DEBUG (LOG_NAS_EMM, "T3460 stopped UE " MME_UE_S1AP_ID_FMT " ", ue_id);
+    OAILOG_DEBUG (LOG_NAS_EMM, "T3460 stopped UE " MME_UE_S1AP_ID_FMT "\n", ue_id);
   }
 }
 
@@ -600,7 +600,7 @@ void nas_stop_T3470(const mme_ue_s1ap_id_t ue_id, struct nas_timer_s * const T34
   if ((T3470) && (T3470->id != NAS_TIMER_INACTIVE_ID)) {
     T3470->id = nas_timer_stop(T3470->id, &timer_callback_args);
     MSC_LOG_EVENT (MSC_NAS_EMM_MME, "0 T3470 stopped UE " MME_UE_S1AP_ID_FMT " ", ue_id);
-    OAILOG_DEBUG (LOG_NAS_EMM, "T3470 stopped UE " MME_UE_S1AP_ID_FMT " ", ue_id);
+    OAILOG_DEBUG (LOG_NAS_EMM, "T3470 stopped UE " MME_UE_S1AP_ID_FMT "\n", ue_id);
   }
 }
 

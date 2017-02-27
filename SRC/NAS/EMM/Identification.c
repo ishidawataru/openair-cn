@@ -283,64 +283,6 @@ emm_proc_identification_complete (
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
 }
 
-//------------------------------------------------------------------------------
-int emm_proc_identification_ll_failure (const mme_ue_s1ap_id_t ue_id)
-{
-  OAILOG_FUNC_IN (LOG_NAS_EMM);
-  int                                     rc = RETURNerror;
-  emm_context_t                          *emm_ctx = NULL;
-
-  OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Identification Lower Layer Failure (ue_id=" MME_UE_S1AP_ID_FMT ")\n", ue_id);
-
-  // Get the UE context
-  ue_mm_context_t *ue_mm_context = mme_ue_context_exists_mme_ue_s1ap_id (&mme_app_desc.mme_ue_contexts, ue_id);
-  if (ue_mm_context) {
-    emm_ctx = &ue_mm_context->emm_context;
-    nas_emm_ident_proc_t * ident_proc = get_nas_common_procedure_identification(emm_ctx);
-
-    if (ident_proc) {
-      emm_sap_t emm_sap = {0};
-      emm_sap.primitive = EMMREG_LOWERLAYER_FAILURE;
-      emm_sap.u.emm_reg.ue_id = ident_proc->ue_id;
-      emm_sap.u.emm_reg.ctx   = emm_ctx;
-      emm_sap.u.emm_reg.notify= true;
-      emm_sap.u.emm_reg.free_proc = true;
-      emm_sap.u.emm_reg.u.ll_failure.emm_proc   = &ident_proc->emm_com_proc.emm_proc;
-      emm_sap.u.emm_reg.u.ll_failure.previous_emm_fsm_state   =  ident_proc->emm_com_proc.emm_proc.previous_emm_fsm_state;
-      MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "0 EMMREG_LOWERLAYER_FAILURE (identification) ue id " MME_UE_S1AP_ID_FMT " ", ident_proc->ue_id);
-      emm_sap_send (&emm_sap);
-    }
-  }
-  OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
-}
-
-//------------------------------------------------------------------------------
-int emm_proc_identification_sdu_not_delivered_ho (const mme_ue_s1ap_id_t ue_id)
-{
-  OAILOG_FUNC_IN (LOG_NAS_EMM);
-  int                                     rc = RETURNerror;
-
-  OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Identification SDU not delivered due to HO (ue_id=" MME_UE_S1AP_ID_FMT ")\n", ue_id);
-
-  // Get the UE context
-  ue_mm_context_t *ue_mm_context = mme_ue_context_exists_mme_ue_s1ap_id (&mme_app_desc.mme_ue_contexts, ue_id);
-  if (ue_mm_context) {
-    emm_context_t *emm_ctx = &ue_mm_context->emm_context;
-    nas_emm_ident_proc_t * ident_proc = get_nas_common_procedure_identification(emm_ctx);
-
-    emm_sap_t emm_sap = {0};
-    emm_sap.primitive = EMMREG_LOWERLAYER_NON_DELIVERY;
-    emm_sap.u.emm_reg.ue_id = ident_proc->ue_id;
-    emm_sap.u.emm_reg.ctx   = emm_ctx;
-    emm_sap.u.emm_reg.notify= true;
-    emm_sap.u.emm_reg.free_proc = true;
-    emm_sap.u.emm_reg.u.non_delivery_ho.emm_proc   = &ident_proc->emm_com_proc.emm_proc;
-    emm_sap.u.emm_reg.u.non_delivery_ho.previous_emm_fsm_state   =  ident_proc->emm_com_proc.emm_proc.previous_emm_fsm_state;
-    MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "0 EMMREG_LOWERLAYER_NON_DELIVERY (identification) ue id " MME_UE_S1AP_ID_FMT " ", ue_mm_context->mme_ue_s1ap_id);
-    emm_sap_send (&emm_sap);
-  }
-  OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
-}
 
 /****************************************************************************/
 /*********************  L O C A L    F U N C T I O N S  *********************/
@@ -421,8 +363,7 @@ static void _identification_t3470_handler (void *args)
       nas_delete_all_emm_procedures(emm_ctx);
     }
   } else {
-    OAILOG_ERROR (LOG_NAS_EMM, "T3470 timer (%lx) expired ue id " MME_UE_S1AP_ID_FMT " No Identification procedure found\n",
-        ident_proc->T3470.id, ident_proc->ue_id);
+    OAILOG_ERROR (LOG_NAS_EMM, "T3470 timer expired, No Identification procedure found\n");
   }
   OAILOG_FUNC_OUT (LOG_NAS_EMM);
 }
@@ -462,6 +403,7 @@ static int _identification_request (nas_emm_ident_proc_t * const proc)
    */
   MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "EMMAS_SECURITY_REQ ue id " MME_UE_S1AP_ID_FMT " IDENTIFICATION", proc->ue_id);
   emm_sap.primitive = EMMAS_SECURITY_REQ;
+  emm_sap.u.emm_as.u.security.puid = proc->emm_com_proc.emm_proc.base_proc.nas_puid;
   emm_sap.u.emm_as.u.security.guti = NULL;
   emm_sap.u.emm_as.u.security.ue_id = proc->ue_id;
   emm_sap.u.emm_as.u.security.msg_type = EMM_AS_MSG_TYPE_IDENT;

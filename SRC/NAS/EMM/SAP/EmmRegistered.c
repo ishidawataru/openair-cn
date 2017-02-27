@@ -30,7 +30,7 @@
 
   Subsystem   EPS Mobility Management
 
-  Author      Frederic Maurel
+  Author      Frederic Maurel, Lionel GAUTHIER
 
   Description Implements the EPS Mobility Management procedures executed
         when the EMM-SAP is in EMM-REGISTERED state.
@@ -161,8 +161,8 @@ EmmRegistered (
     break;
 
   case _EMMREG_DETACH_REQ:
-    OAILOG_ERROR (LOG_NAS_EMM, "EMM-FSM state EMM_REGISTERED - Primitive _EMMREG_DETACH_REQ is not valid\n");
-    MSC_LOG_RX_DISCARDED_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "_EMMREG_DETACH_REQ ue id " MME_UE_S1AP_ID_FMT " ", evt->ue_id);
+    MSC_LOG_RX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "_EMMREG_DETACH_REQ ue id " MME_UE_S1AP_ID_FMT " ", evt->ue_id);
+    rc = emm_fsm_set_state (evt->ue_id, emm_ctx, EMM_DEREGISTERED_INITIATED);
     break;
 
   case _EMMREG_DETACH_FAILED:
@@ -241,36 +241,36 @@ EmmRegistered (
 
   case _EMMREG_LOWERLAYER_FAILURE:
     MSC_LOG_RX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "_EMMREG_LOWERLAYER_FAILURE ue id " MME_UE_S1AP_ID_FMT " ", evt->ue_id);
-    /*
-     * Transmission failure occurred before the EMM common
-     * procedure being completed
-     */
 
-    if ((emm_ctx) && (evt->notify) && (evt->u.ll_failure.emm_proc) && (evt->u.ll_failure.emm_proc->base_proc.failure_notif)) {
-      rc = (*evt->u.ll_failure.emm_proc->base_proc.failure_notif)(emm_ctx);
+    if (emm_ctx) {
+      nas_emm_proc_t * emm_proc = nas_emm_find_procedure_by_msg_digest(emm_ctx, (const char *)evt->u.ll_failure.msg_digest,
+          evt->u.ll_failure.digest_len, evt->u.ll_failure.msg_len);
+      if (emm_proc) {
+        if ((evt->notify) && (emm_proc->not_delivered)) {
+          rc = (*emm_proc->not_delivered)(emm_ctx, emm_proc);
+        }
+      }
     }
-
     break;
 
   case _EMMREG_LOWERLAYER_RELEASE:
     MSC_LOG_RX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "_EMMREG_LOWERLAYER_RELEASE ue id " MME_UE_S1AP_ID_FMT " ", evt->ue_id);
-    /*
-     * Transmission failure occurred before the EMM common
-     * procedure being completed
-     */
-
-    if ((emm_ctx) && (evt->notify) && (evt->u.ll_failure.emm_proc) && (evt->u.ll_failure.emm_proc->base_proc.failure_notif)) {
-      rc = (*evt->u.ll_failure.emm_proc->base_proc.failure_notif)(emm_ctx);
-    }
-
+    nas_delete_all_emm_procedures(emm_ctx);
+    rc = RETURNok;
     break;
 
   case  _EMMREG_LOWERLAYER_NON_DELIVERY:
     MSC_LOG_RX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "_EMMREG_LOWERLAYER_NON_DELIVERY ue id " MME_UE_S1AP_ID_FMT " ", evt->ue_id);
-    if ((emm_ctx) && (evt->notify) && (evt->u.non_delivery_ho.emm_proc) && (evt->u.non_delivery_ho.emm_proc->base_proc.failure_notif)) {
-      rc = (*evt->u.non_delivery_ho.emm_proc->base_proc.failure_notif)(emm_ctx);
-    } else {
-      rc = RETURNok;
+    if (emm_ctx) {
+      nas_emm_proc_t * emm_proc = nas_emm_find_procedure_by_msg_digest(emm_ctx, (const char *)evt->u.non_delivery_ho.msg_digest,
+          evt->u.non_delivery_ho.digest_len, evt->u.non_delivery_ho.msg_len);
+      if (emm_proc) {
+        if ((evt->notify) && (emm_proc->not_delivered)) {
+          rc = (*emm_proc->not_delivered_ho)(emm_ctx, emm_proc);
+        } else {
+          rc = RETURNok;
+        }
+      }
     }
     break;
 

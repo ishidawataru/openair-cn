@@ -75,7 +75,7 @@
 
 extern int emm_cn_wrapper_attach_accept (emm_context_t * emm_context);
 
-static int _emm_cn_authentication_res (const emm_cn_auth_res_t * msg);
+static int _emm_cn_authentication_res (emm_cn_auth_res_t * const msg);
 static int _emm_cn_authentication_fail (const emm_cn_auth_fail_t * msg);
 static int _emm_cn_deregister_ue (const mme_ue_s1ap_id_t ue_id);
 static int _emm_cn_pdn_config_res (emm_cn_pdn_config_res_t * msg_pP);
@@ -96,7 +96,7 @@ static const char                      *_emm_cn_primitive_str[] = {
 };
 
 //------------------------------------------------------------------------------
-static int _emm_cn_authentication_res (const emm_cn_auth_res_t * msg)
+static int _emm_cn_authentication_res (emm_cn_auth_res_t * const msg)
 {
   OAILOG_FUNC_IN (LOG_NAS_EMM);
   emm_context_t                          *emm_ctx = NULL;
@@ -112,7 +112,10 @@ static int _emm_cn_authentication_res (const emm_cn_auth_res_t * msg)
     nas_auth_info_proc_t * auth_info_proc = get_nas_cn_procedure_auth_info(emm_ctx);
 
     if (auth_info_proc) {
-      memcpy(auth_info_proc->vector, msg->vector, msg->nb_vectors);
+      for (int i = 0; i < msg->nb_vectors; i++) {
+        auth_info_proc->vector[i] = msg->vector[i];
+        msg->vector[i] = NULL;
+      }
       auth_info_proc->nb_vectors = msg->nb_vectors;
       rc = (*auth_info_proc->success_notif)(emm_ctx);
     } else {

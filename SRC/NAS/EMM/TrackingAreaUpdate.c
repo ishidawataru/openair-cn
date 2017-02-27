@@ -652,7 +652,7 @@ void free_emm_tau_request_ies(emm_tau_request_ies_t ** const ies)
     free_wrapper((void**)&(*ies)->ms_network_capability);
   }
   if ((*ies)->tmsi_status) {
-    bdestroy_wrapper(&(*ies)->tmsi_status);
+    free_wrapper((void**)&(*ies)->tmsi_status);
   }
   if ((*ies)->mobile_station_classmark2) {
     free_wrapper((void**)&(*ies)->mobile_station_classmark2);

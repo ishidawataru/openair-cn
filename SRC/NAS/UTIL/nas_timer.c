@@ -121,5 +121,5 @@ void nas_timer_handle_signal_expiry (long timer_id, nas_itti_timer_arg_t *nas_it
    */
   nas_itti_timer_arg->nas_timer_callback (nas_itti_timer_arg->nas_timer_callback_arg);
   // assuming timer type is TIMER_ONE_SHOT
-  free_wrapper((void**)nas_itti_timer_arg);
+  free_wrapper((void**)&nas_itti_timer_arg);
 }

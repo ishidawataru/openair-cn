@@ -133,12 +133,26 @@ typedef struct emm_reg_common_s {
 } emm_reg_common_t;
 
 /*
+ * EMMREG primitive for Lower Layer success
+ * ------------------------------------------
+ */
+typedef struct emm_reg_ll_success_s {
+  uint64_t                      puid;
+  uint16_t                      msg_len;
+#define EMM_REG_MSG_DIGEST_SIZE
+  size_t                        digest_len;
+  uint8_t                       msg_digest[EMM_REG_MSG_DIGEST_SIZE];
+} emm_reg_ll_sucess_t;
+
+/*
  * EMMREG primitive for Lower Layer failure
  * ------------------------------------------
  */
 typedef struct emm_reg_ll_failure_s {
   emm_fsm_state_t               previous_emm_fsm_state;
-  struct nas_emm_proc_s        *emm_proc;
+  size_t                        msg_len;
+  size_t                        digest_len;
+  uint8_t                       msg_digest[EMM_REG_MSG_DIGEST_SIZE];
 } emm_reg_ll_failure_t;
 
 /*
@@ -147,7 +161,9 @@ typedef struct emm_reg_ll_failure_s {
  */
 typedef struct emm_reg_sdu_non_delivery_ho_s {
   emm_fsm_state_t               previous_emm_fsm_state;
-  struct nas_emm_proc_s        *emm_proc;
+  size_t                        msg_len;
+  size_t                        digest_len;
+  uint8_t                       msg_digest[EMM_REG_MSG_DIGEST_SIZE];
 } emm_reg_sdu_non_delivery_ho_t;
 
 /*
@@ -167,6 +183,7 @@ typedef struct emm_reg_s {
     emm_reg_sr_t         sr;
     emm_reg_common_t     common;
     emm_reg_ll_failure_t ll_failure;
+    emm_reg_ll_sucess_t  ll_success;
     emm_reg_sdu_non_delivery_ho_t non_delivery_ho;
   } u;
 } emm_reg_t;

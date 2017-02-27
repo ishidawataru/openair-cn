@@ -595,8 +595,7 @@ int emm_proc_attach_complete (
       attach_proc = (nas_emm_attach_proc_t*)ue_mm_context->emm_context.emm_procedures->emm_specific_proc;
 
       REQUIREMENT_3GPP_24_301(R10_5_5_1_2_4__20);
-      emm_ctx_set_valid_guti(&ue_mm_context->emm_context, &attach_proc->guti);
-      nas_delete_attach_procedure(&ue_mm_context->emm_context);
+      emm_ctx_set_valid_guti(&ue_mm_context->emm_context, &ue_mm_context->emm_context._guti);
 
       /*
        * Upon receiving an ATTACH COMPLETE message, the MME shall enter state EMM-REGISTERED
@@ -920,10 +919,21 @@ static int _emm_attach_run_procedure(emm_context_t *emm_context)
 
   if (attach_proc) {
     REQUIREMENT_3GPP_24_301(R10_5_5_1_2_3__1);
+
+    emm_ctx_set_valid_lvr_tai(emm_context, attach_proc->ies->last_visited_registered_tai);
+    emm_ctx_set_valid_ue_nw_cap(emm_context, &attach_proc->ies->ue_network_capability);
+    if (attach_proc->ies->ms_network_capability) {
+      emm_ctx_set_valid_ms_nw_cap(emm_context, attach_proc->ies->ms_network_capability);
+    }
+    emm_context->originating_tai = *attach_proc->ies->originating_tai;
+
+    // temporary choice to clear security context if it exist
+    emm_ctx_clear_security(emm_context);
+
     if (attach_proc->ies->imsi) {
       if (attach_proc->ies->decode_status.mac_matched) {
         // force authentication, even if not necessary
-        rc = _emm_start_attach_proc_authentication (emm_context, attach_proc);//, IDENTITY_TYPE_2_IMSI, _emm_attach_authentified, _emm_attach_release);
+        rc = _emm_start_attach_proc_authentication (emm_context, attach_proc);
       } else {
         // force identification, even if not necessary
         rc = emm_proc_identification (emm_context, (nas_emm_proc_t *)attach_proc, IDENTITY_TYPE_2_IMSI, _emm_attach_success_identification_cb, _emm_attach_failure_identification_cb);
@@ -1316,6 +1326,7 @@ static int _emm_send_attach_accept (emm_context_t * emm_context)
        * Default EPS Bearer Context Request message has to be sent to the UE
        */
       emm_sap.primitive = EMMAS_ESTABLISH_CNF;
+      emm_sap.u.emm_as.u.establish.puid = attach_proc->emm_spec_proc.emm_proc.base_proc.nas_puid;
       emm_sap.u.emm_as.u.establish.ue_id = ue_id;
       emm_sap.u.emm_as.u.establish.nas_info = EMM_AS_NAS_INFO_ATTACH;
 

@@ -30,7 +30,7 @@ Product     NAS stack
 
 Subsystem   EPS Mobility Management
 
-Author      Frederic Maurel
+Author      Frederic Maurel, Lionel GAUTHIER
 
 Description Defines EMM procedures executed by the Non-Access Stratum
         upon receiving notifications from lower layers so that data
@@ -62,9 +62,9 @@ Description Defines EMM procedures executed by the Non-Access Stratum
 /******************  E X P O R T E D    F U N C T I O N S  ******************/
 /****************************************************************************/
 
-int lowerlayer_success(mme_ue_s1ap_id_t ueid);
-int lowerlayer_failure(mme_ue_s1ap_id_t ueid);
-int lowerlayer_non_delivery_indication (mme_ue_s1ap_id_t ue_id);
+int lowerlayer_success (mme_ue_s1ap_id_t ue_id, bstring *nas_msg);
+int lowerlayer_failure(mme_ue_s1ap_id_t ueid, STOLEN_REF bstring *nas_msg);
+int lowerlayer_non_delivery_indication (mme_ue_s1ap_id_t ue_id, STOLEN_REF bstring *nas_msg);
 int lowerlayer_establish(void);
 int lowerlayer_release(mme_ue_s1ap_id_t ue_id, int cause);
 

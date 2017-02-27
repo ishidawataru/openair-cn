@@ -52,6 +52,7 @@
 //} sctp_data_rej_t;
 
 typedef struct sctp_data_cnf_s {
+  bstring          payload;
   sctp_assoc_id_t  assoc_id;
   sctp_stream_id_t stream;
   uint32_t         mme_ue_s1ap_id;

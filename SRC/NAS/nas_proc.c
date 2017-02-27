@@ -225,7 +225,8 @@ nas_proc_establish_ind (
 int
 nas_proc_dl_transfer_cnf (
   const uint32_t ue_id,
-  const nas_error_code_t status)
+  const nas_error_code_t status,
+  bstring * STOLEN_REF nas_msg)
 {
   OAILOG_FUNC_IN (LOG_NAS_EMM);
   emm_sap_t                               emm_sap = {0};
@@ -245,7 +246,10 @@ nas_proc_dl_transfer_cnf (
     MSC_LOG_TX_MESSAGE (MSC_NAS_MME, MSC_NAS_EMM_MME, NULL, 0, "0 EMMAS_DATA_IND (LL_FAIL) ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
   }
   emm_sap.u.emm_as.u.data.ue_id = ue_id;
-  emm_sap.u.emm_as.u.data.nas_msg = NULL;
+  if (*nas_msg) {
+    emm_sap.u.emm_as.u.data.nas_msg   = *nas_msg;
+    *nas_msg = NULL;
+  }
   rc = emm_sap_send (&emm_sap);
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
 }
@@ -269,7 +273,8 @@ nas_proc_dl_transfer_cnf (
 int
 nas_proc_dl_transfer_rej (
   const uint32_t ue_id,
-  const nas_error_code_t status)
+  const nas_error_code_t status,
+  bstring * STOLEN_REF nas_msg)
 {
   OAILOG_FUNC_IN (LOG_NAS_EMM);
   emm_sap_t                               emm_sap = {0};
@@ -294,6 +299,10 @@ nas_proc_dl_transfer_rej (
   }
   emm_sap.u.emm_as.u.data.delivered = status;
   emm_sap.u.emm_as.u.data.nas_msg   = NULL;
+  if (*nas_msg) {
+    emm_sap.u.emm_as.u.data.nas_msg   = *nas_msg;
+    *nas_msg = NULL;
+  }
   rc = emm_sap_send (&emm_sap);
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
 }

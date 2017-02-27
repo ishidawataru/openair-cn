@@ -1010,6 +1010,7 @@ static int _authentication_request (nas_emm_auth_proc_t * auth_proc)
      * to the UE
      */
     emm_sap.primitive = EMMAS_SECURITY_REQ;
+    emm_sap.u.emm_as.u.security.puid = auth_proc->emm_com_proc.emm_proc.base_proc.nas_puid;
     emm_sap.u.emm_as.u.security.guti = NULL;
     emm_sap.u.emm_as.u.security.ue_id = auth_proc->ue_id;
     emm_sap.u.emm_as.u.security.msg_type = EMM_AS_MSG_TYPE_AUTH;

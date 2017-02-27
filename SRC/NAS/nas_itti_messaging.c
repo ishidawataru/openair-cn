@@ -273,7 +273,8 @@ int nas_itti_auth_info_req(
   IMSI_TO_STRING(imsiP,auth_info_req->imsi, IMSI_BCD_DIGITS_MAX+1);
   auth_info_req->imsi_length = strlen(auth_info_req->imsi);
 
-  if ((15 >= auth_info_req->imsi_length) && (0 < auth_info_req->imsi_length)) {
+  if ((15 < auth_info_req->imsi_length) || (6 > auth_info_req->imsi_length)) {
+    OAILOG_ERROR (LOG_NAS_EMM, "ue_id=" MME_UE_S1AP_ID_FMT "Failed to initiate S6a AUTHENTICATION INFORMATION procedure, bad IMSI %s\n", ue_idP, auth_info_req->imsi);
     OAILOG_FUNC_RETURN(LOG_NAS, RETURNerror);
   }
 

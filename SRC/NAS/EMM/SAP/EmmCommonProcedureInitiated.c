@@ -31,7 +31,7 @@
 
   Subsystem   EPS Mobility Management
 
-  Author      Frederic Maurel
+  Author      Frederic Maurel, Lionel GAUTHIER
 
   Description Implements the EPS Mobility Management procedures executed
         when the EMM-SAP is in EMM-COMMON-PROCEDURE-INITIATED state.
@@ -202,8 +202,23 @@ int EmmCommonProcedureInitiated (emm_reg_t * const evt)
     break;
 
   case _EMMREG_ATTACH_ABORT:
-    OAILOG_ERROR (LOG_NAS_EMM, "EMM-FSM state EMM_COMMON_PROCEDURE_INITIATED - Primitive _EMMREG_ATTACH_ABORT is not valid\n");
-    MSC_LOG_RX_DISCARDED_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "_EMMREG_ATTACH_ABORT ue id " MME_UE_S1AP_ID_FMT " ", evt->ue_id);
+    if (evt->u.attach.proc) {
+      MSC_LOG_RX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "_EMMREG_ATTACH_ABORT ue id " MME_UE_S1AP_ID_FMT " ", evt->ue_id);
+      rc = emm_fsm_set_state (evt->ue_id, emm_ctx, EMM_DEREGISTERED);
+      if ((emm_ctx) && (evt->u.attach.proc->emm_spec_proc.emm_proc.base_proc.abort)) {
+        (*evt->u.attach.proc->emm_spec_proc.emm_proc.base_proc.abort)(emm_ctx, &evt->u.attach.proc->emm_spec_proc.emm_proc.base_proc);
+      }
+
+      if ((rc != RETURNerror) && (emm_ctx) && (evt->notify) && (evt->u.attach.proc->emm_spec_proc.emm_proc.base_proc.failure_notif)) {
+        (*evt->u.attach.proc->emm_spec_proc.emm_proc.base_proc.failure_notif)(emm_ctx);
+      }
+      if (evt->free_proc) {
+        nas_delete_attach_procedure(emm_ctx);
+      }
+    } else {
+      MSC_LOG_RX_DISCARDED_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "_EMMREG_ATTACH_ABORT ue id " MME_UE_S1AP_ID_FMT " ", evt->ue_id);
+    }
+
     break;
 
   case _EMMREG_DETACH_INIT:
@@ -261,45 +276,49 @@ int EmmCommonProcedureInitiated (emm_reg_t * const evt)
     /*
      * Data successfully delivered to the network
      */
+    if (emm_ctx) {
+      nas_emm_proc_t * emm_proc = nas_emm_find_procedure_by_msg_digest(emm_ctx, (const char *)evt->u.ll_success.msg_digest,
+          evt->u.ll_success.digest_len, evt->u.ll_success.msg_len);
+      if (emm_proc) {
+        if ((evt->notify) && (emm_proc->not_delivered)) {
+          rc = (*emm_proc->delivered)(emm_ctx, emm_proc);
+        }
+      }
+    }
     rc = RETURNok;
     break;
 
   case _EMMREG_LOWERLAYER_FAILURE:
     MSC_LOG_RX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "_EMMREG_LOWERLAYER_FAILURE ue id " MME_UE_S1AP_ID_FMT " ", evt->ue_id);
-    /*
-     * Transmission failure occurred before the EMM common
-     * procedure being completed
-     */
 
-    if ((emm_ctx) && (evt->notify) && (evt->u.ll_failure.emm_proc) && (evt->u.ll_failure.emm_proc->base_proc.failure_notif)) {
-      rc = (*evt->u.ll_failure.emm_proc->base_proc.failure_notif)(emm_ctx);
+    if (emm_ctx) {
+      nas_emm_proc_t * emm_proc = nas_emm_find_procedure_by_msg_digest(emm_ctx, (const char *)evt->u.ll_failure.msg_digest,
+          evt->u.ll_failure.digest_len, evt->u.ll_failure.msg_len);
+      if (emm_proc) {
+        if ((evt->notify) && (emm_proc->not_delivered)) {
+          rc = (*emm_proc->not_delivered)(emm_ctx, emm_proc);
+        }
+      }
+      rc = emm_fsm_set_state (evt->ue_id, emm_ctx, EMM_DEREGISTERED);
     }
-
-    rc = emm_fsm_set_state (evt->ue_id, emm_ctx, EMM_DEREGISTERED);
     break;
 
   case _EMMREG_LOWERLAYER_RELEASE:
     MSC_LOG_RX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "_EMMREG_LOWERLAYER_RELEASE ue id " MME_UE_S1AP_ID_FMT " ", evt->ue_id);
-    /*
-     * Transmission failure occurred before the EMM common
-     * procedure being completed
-     */
-
-    if ((emm_ctx) && (evt->notify) && (evt->u.ll_failure.emm_proc) && (evt->u.ll_failure.emm_proc->base_proc.failure_notif)) {
-      rc = (*evt->u.ll_failure.emm_proc->base_proc.failure_notif)(emm_ctx);
-    }
-
-    rc = emm_fsm_set_state (evt->ue_id, emm_ctx, EMM_DEREGISTERED);
+    nas_delete_all_emm_procedures(emm_ctx);
+    rc = RETURNok;
     break;
 
   case  _EMMREG_LOWERLAYER_NON_DELIVERY:
     MSC_LOG_RX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_EMM_MME, NULL, 0, "_EMMREG_LOWERLAYER_NON_DELIVERY ue id " MME_UE_S1AP_ID_FMT " ", evt->ue_id);
-    if ((emm_ctx) && (evt->notify) && (evt->u.non_delivery_ho.emm_proc) && (evt->u.non_delivery_ho.emm_proc->base_proc.failure_notif)) {
-      rc = (*evt->u.non_delivery_ho.emm_proc->base_proc.failure_notif)(emm_ctx);
-    } else {
-      rc = RETURNok;
-    }
-    if (rc != RETURNerror) {
+    if (emm_ctx) {
+      nas_emm_proc_t * emm_proc = nas_emm_find_procedure_by_msg_digest(emm_ctx, (const char *)evt->u.non_delivery_ho.msg_digest,
+          evt->u.non_delivery_ho.digest_len, evt->u.non_delivery_ho.msg_len);
+      if (emm_proc) {
+        if ((evt->notify) && (emm_proc->not_delivered)) {
+          rc = (*emm_proc->not_delivered_ho)(emm_ctx, emm_proc);
+        }
+      }
       rc = emm_fsm_set_state (evt->ue_id, emm_ctx, EMM_DEREGISTERED);
     }
     break;

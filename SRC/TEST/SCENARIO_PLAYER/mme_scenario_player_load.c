@@ -1198,7 +1198,7 @@ void msp_free_scenario (scenario_t * scenario)
     OAILOG_DEBUG (LOG_MME_SCENARIO_PLAYER, "Freeing scenario %s\n", bdata(scenario->name));
     pthread_mutex_lock(&scenario->lock);
     if (scenario->usim_data) {
-      free_wrapper((void**)scenario->usim_data);
+      free_wrapper((void**)&scenario->usim_data);
     }
     scenario_player_item_t *item = scenario->head_item;
     while (item) {

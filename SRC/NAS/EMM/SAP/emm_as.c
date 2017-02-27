@@ -120,7 +120,7 @@ static int _emm_as_recv (
 
 
 static int _emm_as_establish_req (emm_as_establish_t * msg, int *emm_cause);
-static int _emm_as_data_ind (const emm_as_data_t * msg, int *emm_cause);
+static int _emm_as_data_ind (emm_as_data_t * msg, int *emm_cause);
 static int _emm_as_release_ind (const emm_as_release_t * const release, int *emm_cause);
 
 
@@ -186,7 +186,7 @@ void emm_as_initialize (void)
  **      Others:    None                                       **
  **                                                                        **
  ***************************************************************************/
-int emm_as_send (const emm_as_t * msg)
+int emm_as_send (emm_as_t * msg)
 {
   OAILOG_FUNC_IN (LOG_NAS_EMM);
   int                                     rc = RETURNok;
@@ -480,7 +480,7 @@ static int _emm_as_recv (
  **      Others:    None                                       **
  **                                                                        **
  ***************************************************************************/
-static int _emm_as_data_ind (const emm_as_data_t * msg, int *emm_cause)
+static int _emm_as_data_ind (emm_as_data_t * msg, int *emm_cause)
 {
   OAILOG_FUNC_IN (LOG_NAS_EMM);
   int                                     rc = RETURNerror;
@@ -554,18 +554,18 @@ static int _emm_as_data_ind (const emm_as_data_t * msg, int *emm_cause)
       /*
        * Process successfull lower layer transfer indication
        */
-      rc = lowerlayer_success (msg->ue_id);
+      rc = lowerlayer_success (msg->ue_id, &msg->nas_msg);
     }
   } else if ( EMM_AS_DATA_DELIVERED_LOWER_LAYER_FAILURE == msg->delivered) {
 
     /*
      * Process lower layer transmission failure of NAS message
      */
-    rc = lowerlayer_failure (msg->ue_id);
+    rc = lowerlayer_failure (msg->ue_id, &msg->nas_msg);
   } else {
-    rc = lowerlayer_non_delivery_indication (msg->ue_id);
+    rc = lowerlayer_non_delivery_indication (msg->ue_id, &msg->nas_msg);
   }
-  bdestroy (msg->nas_msg); // msg->nas_msg = NULL;
+  bdestroy_wrapper (&msg->nas_msg);
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);
 }
 
@@ -1361,6 +1361,8 @@ static int _emm_as_security_req (const emm_as_security_t * msg, dl_info_transfer
                                                                     emm_security_context);
 
     if (bytes > 0) {
+      nas_emm_procedure_register_emm_message(msg->ue_id, msg->puid, as_msg->nas_msg);
+
       OAILOG_FUNC_RETURN (LOG_NAS_EMM, AS_DL_INFO_TRANSFER_REQ);
     }
   }
