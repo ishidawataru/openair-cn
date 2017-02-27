@@ -101,9 +101,9 @@
     <file>../../../MSGR10/ITTI_NAS_DOWNLINK_DATA_REQ.AUTHENTICATION_REJECT.xml</file>
   </message_file>
 
-  <!-- ATTACH_REJECT -->
+  <!-- ATTACH_REJECT>
   <message_file action="receive" time="1.0"  time_ref="-1">
     <file>../../../MSGR10/ITTI_NAS_DOWNLINK_DATA_REQ.ATTACH_REJECT.xml</file>
-  </message_file>
+  </message_file-->
 
 </scenario>
