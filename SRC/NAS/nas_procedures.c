@@ -761,6 +761,7 @@ static nas_emm_proc_t * nas_emm_find_procedure_by_puid(struct emm_context_s * co
     nas_emm_common_procedure_t *p1 = LIST_FIRST(&emm_context->emm_procedures->emm_common_procs);
     while (p1) {
       if (p1->proc->emm_proc.base_proc.nas_puid == puid) {
+        OAILOG_TRACE (LOG_NAS_EMM, "Found emm_common_proc UID 0x%"PRIx64"\n", puid);
         return &p1->proc->emm_proc;
       }
       p1 = LIST_NEXT(p1, entries);
@@ -768,12 +769,14 @@ static nas_emm_proc_t * nas_emm_find_procedure_by_puid(struct emm_context_s * co
 
     if (emm_context->emm_procedures->emm_specific_proc) {
       if (emm_context->emm_procedures->emm_specific_proc->emm_proc.base_proc.nas_puid == puid) {
+        OAILOG_TRACE (LOG_NAS_EMM, "Found emm_specific_proc UID 0x%"PRIx64"\n", puid);
         return &emm_context->emm_procedures->emm_specific_proc->emm_proc;
       }
     }
 
     if (emm_context->emm_procedures->emm_con_mngt_proc) {
       if (emm_context->emm_procedures->emm_con_mngt_proc->emm_proc.base_proc.nas_puid == puid) {
+        OAILOG_TRACE (LOG_NAS_EMM, "Found emm_con_mngt_proc UID 0x%"PRIx64"\n", puid);
         return &emm_context->emm_procedures->emm_con_mngt_proc->emm_proc;
       }
     }
@@ -819,12 +822,10 @@ nas_emm_proc_t * nas_emm_find_procedure_by_msg_digest(struct emm_context_s * con
           size_t min = min(digest_bytes, NAS_MSG_DIGEST_SIZE);
           if (!memcmp(digest, emm_context->emm_procedures->nas_proc_mess_sign[i].digest, min)) {
             emm_proc = nas_emm_find_procedure_by_puid(emm_context, emm_context->emm_procedures->nas_proc_mess_sign[i].puid);
-            OAILOG_TRACE (LOG_NAS_EMM, "Found proc UID 0x%"PRIx64"\n", emm_proc->base_proc.nas_puid);
             break;
           }
         } else {
           emm_proc = nas_emm_find_procedure_by_puid(emm_context, emm_context->emm_procedures->nas_proc_mess_sign[i].puid);
-          OAILOG_TRACE (LOG_NAS_EMM, "Found proc UID 0x%"PRIx64"\n", emm_proc->base_proc.nas_puid);
           break;
         }
       }
