@@ -755,7 +755,7 @@ static int _security_abort (emm_context_t * emm_context, struct nas_base_proc_s 
 
   if (base_proc) {
     nas_emm_smc_proc_t * smc_proc = (nas_emm_smc_proc_t *)base_proc;
-    OAILOG_WARNING (LOG_NAS_EMM, "EMM-PROC  - Abort security mode control procedure " "(ue_id=" MME_UE_S1AP_ID_FMT ")\n", smc_proc->ue_id);
+    OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Abort Security Mode Control procedure " "(ue_id=" MME_UE_S1AP_ID_FMT ")\n", smc_proc->ue_id);
     /*
      * Stop timer T3460
      */

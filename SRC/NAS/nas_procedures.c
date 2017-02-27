@@ -748,7 +748,7 @@ void nas_digest_msg(const unsigned char * const msg, const size_t msg_len, char 
     int min_length = min(result_len, (*digest_length));
     memcpy(digest, result, min_length);
     *digest_length = min_length;
-    for (int i = 0;  i < result_len;  i++) printf("%02x", result[i]);
+    OPENSSL_free(result);
   }
 }
 
@@ -819,10 +819,12 @@ nas_emm_proc_t * nas_emm_find_procedure_by_msg_digest(struct emm_context_s * con
           size_t min = min(digest_bytes, NAS_MSG_DIGEST_SIZE);
           if (!memcmp(digest, emm_context->emm_procedures->nas_proc_mess_sign[i].digest, min)) {
             emm_proc = nas_emm_find_procedure_by_puid(emm_context, emm_context->emm_procedures->nas_proc_mess_sign[i].puid);
+            OAILOG_TRACE (LOG_NAS_EMM, "Found proc UID 0x%"PRIx64"\n", emm_proc->base_proc.nas_puid);
             break;
           }
         } else {
           emm_proc = nas_emm_find_procedure_by_puid(emm_context, emm_context->emm_procedures->nas_proc_mess_sign[i].puid);
+          OAILOG_TRACE (LOG_NAS_EMM, "Found proc UID 0x%"PRIx64"\n", emm_proc->base_proc.nas_puid);
           break;
         }
       }

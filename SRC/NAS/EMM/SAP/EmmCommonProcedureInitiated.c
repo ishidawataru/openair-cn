@@ -280,7 +280,7 @@ int EmmCommonProcedureInitiated (emm_reg_t * const evt)
       nas_emm_proc_t * emm_proc = nas_emm_find_procedure_by_msg_digest(emm_ctx, (const char *)evt->u.ll_success.msg_digest,
           evt->u.ll_success.digest_len, evt->u.ll_success.msg_len);
       if (emm_proc) {
-        if ((evt->notify) && (emm_proc->not_delivered)) {
+        if ((evt->notify) && (emm_proc->delivered)) {
           rc = (*emm_proc->delivered)(emm_ctx, emm_proc);
         }
       }

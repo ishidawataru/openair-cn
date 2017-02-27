@@ -475,7 +475,7 @@ static int _identification_abort (struct emm_context_s *emm_context, struct nas_
         (NAS_EMM_PROC_TYPE_COMMON == ((nas_emm_proc_t*)base_proc)->type) &&
         (EMM_COMM_PROC_IDENT == ((nas_emm_common_proc_t*)base_proc)->type), "Mismatch in procedure type");
 
-    OAILOG_WARNING (LOG_NAS_EMM, "EMM-PROC  - Abort identification procedure " "(ue_id=" MME_UE_S1AP_ID_FMT ")\n", ident_proc->ue_id);
+    OAILOG_INFO (LOG_NAS_EMM, "EMM-PROC  - Abort identification procedure " "(ue_id=" MME_UE_S1AP_ID_FMT ")\n", ident_proc->ue_id);
 
     /*
      * Stop timer T3470
