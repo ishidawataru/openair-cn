@@ -511,7 +511,7 @@ int emm_proc_authentication_failure (
             // Only to return to a "valid" EMM state
             {
               emm_sap_t                               emm_sap = {0};
-              emm_sap.primitive = EMMREG_COMMON_PROC_REJ;
+              emm_sap.primitive = EMMREG_COMMON_PROC_ABORT;
               emm_sap.u.emm_reg.ue_id     = ue_id;
               emm_sap.u.emm_reg.ctx       = emm_ctx;
               emm_sap.u.emm_reg.notify    = false;
@@ -574,7 +574,7 @@ int emm_proc_authentication_failure (
           // Only to return to a "valid" EMM state
           {
             emm_sap_t                               emm_sap = {0};
-            emm_sap.primitive = EMMREG_COMMON_PROC_REJ;
+            emm_sap.primitive = EMMREG_COMMON_PROC_ABORT;
             emm_sap.u.emm_reg.ue_id     = ue_id;
             emm_sap.u.emm_reg.ctx       = emm_ctx;
             emm_sap.u.emm_reg.notify    = false;
@@ -622,7 +622,7 @@ int emm_proc_authentication_failure (
           // Only to return to a "valid" EMM state
           {
             emm_sap_t                               emm_sap = {0};
-            emm_sap.primitive = EMMREG_COMMON_PROC_REJ;
+            emm_sap.primitive = EMMREG_COMMON_PROC_ABORT;
             emm_sap.u.emm_reg.ue_id     = ue_id;
             emm_sap.u.emm_reg.ctx       = emm_ctx;
             emm_sap.u.emm_reg.notify    = false;
