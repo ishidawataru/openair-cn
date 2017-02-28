@@ -237,6 +237,7 @@ void esm_ebr_context_init (esm_ebr_context_t *esm_ebr_context)
      */
     esm_ebr_context->timer.id = NAS_TIMER_INACTIVE_ID;
   }
+  OAILOG_FUNC_OUT (LOG_NAS_ESM);
 }
 
 /****************************************************************************
