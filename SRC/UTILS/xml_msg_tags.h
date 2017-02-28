@@ -129,6 +129,7 @@
 #  define E_RAB_TO_BE_SETUP_LIST_XML_STR                 "e_rab_to_be_setup_list"
 #  define GBR_QOS_INFORMATION_XML_STR                    "gbr_qos_information"
 #  define KENB_XML_STR                                   "kenb"
+#  define NAS_BIN_MESSAGE_XML_STR                        "nas_bin_message"
 #  define NAS_ERROR_CODE_XML_STR                         "nas_error_code"
 #  define NUMBER_INBOUND_STREAMS_XML_STR                 "number_inbound_streams"
 #  define NUMBER_OUTBOUND_STREAMS_XML_STR                "number_outbound_streams"

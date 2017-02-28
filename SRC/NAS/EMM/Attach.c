@@ -888,18 +888,6 @@ static int _emm_attach_abort (struct emm_context_s* emm_context, struct nas_base
     esm_sap.ctx = emm_context;
     esm_sap.recv = NULL;
     rc = esm_sap_send (&esm_sap);
-
-    /*
-     * Notify EMM that EPS attach procedure failed
-     */
-    emm_sap_t                               emm_sap = {0};
-    emm_sap.primitive = EMMREG_ATTACH_REJ;
-    emm_sap.u.emm_reg.ue_id = ue_id;
-    emm_sap.u.emm_reg.ctx = emm_context;
-    emm_sap.u.emm_reg.notify = true;
-    emm_sap.u.emm_reg.free_proc = true;
-    emm_sap.u.emm_reg.u.attach.proc = attach_proc;
-    rc = emm_sap_send (&emm_sap);
   }
 
   OAILOG_FUNC_RETURN (LOG_NAS_EMM, rc);

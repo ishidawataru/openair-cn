@@ -139,7 +139,7 @@ typedef struct emm_reg_common_s {
 typedef struct emm_reg_ll_success_s {
   uint64_t                      puid;
   uint16_t                      msg_len;
-#define EMM_REG_MSG_DIGEST_SIZE
+#define EMM_REG_MSG_DIGEST_SIZE 16
   size_t                        digest_len;
   uint8_t                       msg_digest[EMM_REG_MSG_DIGEST_SIZE];
 } emm_reg_ll_sucess_t;

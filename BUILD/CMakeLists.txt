@@ -507,6 +507,7 @@ add_library(SECU_CN ${SECU_CN_SRC})
 set(CN_UTILS_SRC
   ${OPENAIRCN_DIR}/SRC/UTILS/async_system.c
   ${OPENAIRCN_DIR}/SRC/UTILS/conversions.c
+  ${OPENAIRCN_DIR}/SRC/UTILS/digest.c
   ${OPENAIRCN_DIR}/SRC/UTILS/dynamic_memory_check.c
   ${OPENAIRCN_DIR}/SRC/UTILS/enum_string.c
   ${OPENAIRCN_DIR}/SRC/UTILS/mcc_mnc_itu.c

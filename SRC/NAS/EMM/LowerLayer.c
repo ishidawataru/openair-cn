@@ -116,9 +116,10 @@ int lowerlayer_success (mme_ue_s1ap_id_t ue_id, bstring *nas_msg)
     emm_sap.u.emm_reg.free_proc = false;
 
     if (*nas_msg) {
+      emm_sap.u.emm_reg.u.ll_success.msg_len = blength(*nas_msg);
+      emm_sap.u.emm_reg.u.ll_success.digest_len = EMM_REG_MSG_DIGEST_SIZE;
       nas_digest_msg((const unsigned char * const)bdata(*nas_msg), blength(*nas_msg),
           (char * const)emm_sap.u.emm_reg.u.ll_success.msg_digest, &emm_sap.u.emm_reg.u.ll_success.digest_len);
-      emm_sap.u.emm_reg.u.ll_success.msg_len = blength(*nas_msg);
     }
     MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_MME, NULL, 0, "EMMREG_LOWERLAYER_SUCCESS ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
     rc = emm_sap_send (&emm_sap);
@@ -156,13 +157,14 @@ int lowerlayer_failure (mme_ue_s1ap_id_t ue_id, STOLEN_REF bstring *nas_msg)
 
   if (ue_mm_context) {
     emm_sap.u.emm_reg.ctx = &ue_mm_context->emm_context;
-    emm_sap.u.emm_reg.notify = true;
+    emm_sap.u.emm_reg.notify    = true;
     emm_sap.u.emm_reg.free_proc = false;
 
     if (*nas_msg) {
+      emm_sap.u.emm_reg.u.ll_failure.msg_len = blength(*nas_msg);
+      emm_sap.u.emm_reg.u.ll_failure.digest_len = EMM_REG_MSG_DIGEST_SIZE;
       nas_digest_msg((const unsigned char * const)bdata(*nas_msg), blength(*nas_msg),
           (char * const)emm_sap.u.emm_reg.u.ll_failure.msg_digest, &emm_sap.u.emm_reg.u.ll_failure.digest_len);
-      emm_sap.u.emm_reg.u.ll_failure.msg_len = blength(*nas_msg);
     }
     MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_MME, NULL, 0, "EMMREG_LOWERLAYER_FAILURE ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
     rc = emm_sap_send (&emm_sap);
@@ -201,9 +203,10 @@ int lowerlayer_non_delivery_indication (mme_ue_s1ap_id_t ue_id, STOLEN_REF bstri
   if (ue_mm_context) {
     emm_sap.u.emm_reg.ctx = &ue_mm_context->emm_context;
     if (*nas_msg) {
+      emm_sap.u.emm_reg.u.non_delivery_ho.msg_len = blength(*nas_msg);
+      emm_sap.u.emm_reg.u.non_delivery_ho.digest_len = EMM_REG_MSG_DIGEST_SIZE;
       nas_digest_msg((const unsigned char * const)bdata(*nas_msg), blength(*nas_msg),
           (char * const)emm_sap.u.emm_reg.u.non_delivery_ho.msg_digest, &emm_sap.u.emm_reg.u.non_delivery_ho.digest_len);
-      emm_sap.u.emm_reg.u.non_delivery_ho.msg_len = blength(*nas_msg);
     }
     MSC_LOG_TX_MESSAGE (MSC_NAS_EMM_MME, MSC_NAS_MME, NULL, 0, "EMMREG_LOWERLAYER_NON_DELIVERY ue id " MME_UE_S1AP_ID_FMT " ", ue_id);
     rc = emm_sap_send (&emm_sap);

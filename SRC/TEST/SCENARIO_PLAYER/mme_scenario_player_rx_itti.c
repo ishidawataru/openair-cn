@@ -63,6 +63,7 @@
 #include "itti_free_defined_msg.h"
 #include "itti_comp.h"
 #include "sp_xml_compare.h"
+#include "sp_xml_load.h"
 #include "mme_scenario_player_rx_itti.h"
 
 extern scenario_player_t g_msp_scenarios;
@@ -249,6 +250,16 @@ void mme_scenario_player_handle_nas_downlink_data_req (instance_t instance, cons
         scenario_set_status(scenario, SCENARIO_STATUS_PLAY_FAILED, SCENARIO_XML_FILE_DUMP_FAILED,  "MSG NAS_DOWNLINK_DATA_REQ");
         pthread_mutex_unlock(&scenario->lock);
         return;
+      }
+
+      // Update global var LATEST_DL_NAS_MSG
+      // hardcoded var "LATEST_DL_NAS_MSG" type hexstream
+      scenario_player_item_t * nas_msg_var = sp_get_var(scenario, VAR_NAME_LATEST_DL_NAS_MSG);
+      if (nas_msg_var) {
+        if (nas_msg_var->u.var.value.value_bstr) {
+          bdestroy_wrapper(&nas_msg_var->u.var.value.value_bstr);
+        }
+        nas_msg_var->u.var.value.value_bstr = bstrcpy(NAS_DL_DATA_REQ (received_message).nas_msg);
       }
       //-------------------------------
       // Compare (in XML) received message with scenario message

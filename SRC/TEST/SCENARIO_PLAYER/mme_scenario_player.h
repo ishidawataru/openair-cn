@@ -35,6 +35,8 @@
 #include "usim_authenticate.h"
 #include "emm_data.h"
 
+#define  VAR_NAME_LATEST_DL_NAS_MSG ((unsigned char*)"LATEST_DL_NAS_MSG")
+
 typedef enum {
   SCENARIO_PLAYER_ITEM_NULL = 0,
   SCENARIO_PLAYER_ITEM_SCENARIO,

@@ -745,9 +745,11 @@ void nas_digest_msg(const unsigned char * const msg, const size_t msg_len, char 
   unsigned int   result_len = 0;
   unsigned char *result = NULL;
   if (RETURNok == digest_buffer(EVP_md4, msg, msg_len, &result, &result_len)) {
+    //OAILOG_STREAM_HEX (OAILOG_LEVEL_TRACE, LOG_NAS_EMM, "NAS Msg :", msg, msg_len);
     int min_length = min(result_len, (*digest_length));
     memcpy(digest, result, min_length);
     *digest_length = min_length;
+    //OAILOG_STREAM_HEX (OAILOG_LEVEL_TRACE, LOG_NAS_EMM, "Digest:", digest, (*digest_length));
     OPENSSL_free(result);
   }
 }
@@ -781,6 +783,7 @@ static nas_emm_proc_t * nas_emm_find_procedure_by_puid(struct emm_context_s * co
       }
     }
   }
+  OAILOG_TRACE (LOG_NAS_EMM, "Did not find proc UID 0x%"PRIx64"\n", puid);
   return NULL;
 }
 

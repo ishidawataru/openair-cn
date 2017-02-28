@@ -180,3 +180,4 @@ bool sp_nas_pdu_from_xml (
   }
   OAILOG_FUNC_RETURN (LOG_MME_SCENARIO_PLAYER, false);
 }
+

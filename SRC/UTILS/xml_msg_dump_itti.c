@@ -878,7 +878,11 @@ void xml_msg_dump_itti_nas_downlink_data_rej(const itti_nas_dl_data_rej_t * cons
 
     // mandatory attributes of itti_nas_dl_data_rej_t
     mme_ue_s1ap_id_to_xml(&itti_msg->ue_id, xml_text_writer);
+
+    XML_WRITE_HEX_ELEMENT(xml_text_writer, NAS_BIN_MESSAGE_XML_STR, bdata(itti_msg->nas_msg), blength(itti_msg->nas_msg));
+    // for information only
     nas_pdu_to_xml(itti_msg->nas_msg, xml_text_writer);
+
     XML_WRITE_END_ELEMENT(xml_text_writer);
 
     rc = xmlTextWriterEndDocument(xml_text_writer);

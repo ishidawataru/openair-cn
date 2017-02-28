@@ -1197,7 +1197,10 @@ int xml_msg_load_itti_nas_downlink_data_rej(scenario_t * const scenario, scenari
       }
 
       if (res) {
-        res = sp_nas_pdu_from_xml(scenario, msg, &msg->itti_msg->ittiMsg.nas_dl_data_rej.nas_msg);
+        //res = sp_nas_pdu_from_xml(scenario, msg, &msg->itti_msg->ittiMsg.nas_dl_data_rej.nas_msg);
+        xpath_expr = bformat("./%s",NAS_BIN_MESSAGE_XML_STR);
+        res = sp_xml_load_hex_stream_leaf_tag(scenario, msg, xpath_expr, &msg->itti_msg->ittiMsg.nas_dl_data_rej.nas_msg);
+        bdestroy_wrapper (&xpath_expr);
       }
     } else {
       res = false;
