@@ -24,6 +24,7 @@
   <var name="TRACKING_AREA_CODE"                          value="1"        />
 
   <!-- VARIABLES FROM MME -->
+  <var name="LATEST_DL_NAS_MSG"                                    hex_stream_value="0000000000" />
   <var name="NAS_MAC_DL"                                           value="00000000" />
   <var name="MME_UE_S1AP_ID"                                       value="FFFFFFFF"   />
   <var name="MME_S1U_TEID"                                         value="000000"   />
