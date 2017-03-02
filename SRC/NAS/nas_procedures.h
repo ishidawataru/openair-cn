@@ -250,10 +250,42 @@ typedef struct nas_sr_proc_s {
 ////////////////////////////////////////////////////////////////////////////////
 // ESM procedures
 ////////////////////////////////////////////////////////////////////////////////
+typedef enum {
+  ESM_PROC_NONE = 0,
+  ESM_PROC_EPS_BEARER_CONTEXT,
+  ESM_PROC_TRANSACTION
+} esm_proc_type_t;
+
 typedef struct nas_esm_proc_s {
   nas_base_proc_t             base_proc;
-  int                         type;
+  esm_proc_type_t             type;
 } nas_esm_proc_t;
+
+typedef enum {
+  ESM_BEARER_CTX_PROC_NONE = 0,
+  ESM_PROC_DEFAULT_EPS_BEARER_CTXT_ACTIVATION,
+  ESM_PROC_DEDICATED_EPS_BEARER_CTXT_ACTIVATION,
+  ESM_PROC_EPS_BEARER_CTXT_MODIFICATION,
+  ESM_PROC_EPS_BEARER_CTXT_DEACTIVATION
+} esm_bearer_ctx_proc_type_t;
+
+typedef struct nas_esm_bearer_ctx_proc_s {
+  nas_esm_proc_t              esm_proc;
+  esm_bearer_ctx_proc_type_t  type;
+} nas_esm_bearer_ctx_proc_t;
+
+typedef enum {
+  ESM_TRANSACTION_PROC_NONE = 0,
+  ESM_PROC_TRANSACTION_PDN_CONNECTIVITY,
+  ESM_PROC_TRANSACTION_PDN_DISCONNECT,
+  ESM_PROC_TRANSACTION_BEARER_RESOURCE_ALLOCATION,
+  ESM_PROC_TRANSACTION_BEARER_RESOURCE_MODIFICATION,
+} esm_transaction_proc_type_t;
+
+typedef struct nas_esm_transaction_proc_s {
+  nas_esm_proc_t               esm_proc;
+  esm_transaction_proc_type_t  type;
+} nas_esm_transaction_proc_t;
 
 ////////////////////////////////////////////////////////////////////////////////
 // CN procedures
